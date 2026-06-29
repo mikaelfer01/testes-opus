@@ -35,3 +35,8 @@
   [headers.values]
     X-Frame-Options = "DENY"
     X-Content-Type-Options = "nosniff"
+
+[[redirects]]
+  from = "/api/debug-faturamento"
+  to = "/.netlify/functions/debug-faturamento"
+  status = 200
