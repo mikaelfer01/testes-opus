@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0a1728">
+<title>OPUS — Faturamento</title>
+<script type="module" src="/checar-login.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@1,700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --navy:#0a1728;--navy2:#0d1f3c;--gold:#e8c96a;--gold2:#b8902a;
+  --bg:#f5f7fb;--card:#fff;--border:#e5e9f2;
+  --ink:#0b1437;--ink2:#3f4a6b;--ink3:#6b7691;--ink4:#9aa3b8;
+  --ok:#16a34a;--ok-bg:rgba(22,163,74,.1);
+  --err:#dc2626;--err-bg:rgba(220,38,38,.1);
+  --warn:#ea580c;--warn-bg:rgba(234,88,12,.1);
+  --info:#1d4ed8;--info-bg:rgba(29,78,216,.1);
+  --purple:#7c3aed;--purple-bg:rgba(124,58,237,.1);
+  --teal:#0d9488;--teal-bg:rgba(13,148,136,.1);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden;overscroll-behavior:none}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;display:flex;flex-direction:column}
+
+/* HEADER */
+.hdr{flex-shrink:0;height:56px;background:linear-gradient(135deg,var(--navy),var(--navy2));color:#fff;display:flex;align-items:center;gap:12px;padding:0 14px;border-bottom:2px solid var(--gold2);box-shadow:0 4px 16px rgba(10,15,40,.3);z-index:10}
+.hdr-back{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:#fff;width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;flex-shrink:0}
+.hdr-back:active{background:rgba(255,255,255,.2)}
+.hdr-title{flex:1;min-width:0}
+.hdr-t1{font-family:'Playfair Display',serif;font-style:italic;font-size:14px;font-weight:700;color:var(--gold);line-height:1}
+.hdr-t2{font-size:11px;color:rgba(255,255,255,.7);margin-top:2px}
+.hdr-user{font-size:10px;color:rgba(255,255,255,.6);text-align:right;flex-shrink:0;line-height:1.4}
+.hdr-user b{display:block;color:#fff;font-size:11px;font-weight:700}
+
+/* TABS */
+.tab-bar{flex-shrink:0;height:56px;background:#fff;border-bottom:1px solid var(--border);display:flex;box-shadow:0 2px 8px rgba(0,0,0,.04);z-index:9}
+.tab-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;border:none;background:transparent;font-family:inherit;color:var(--ink4);font-size:10px;font-weight:700;letter-spacing:.3px;position:relative;transition:color .15s;border-bottom:3px solid transparent}
+.tab-btn.ativa{color:var(--teal);border-bottom-color:var(--teal)}
+.tab-btn .ico{font-size:18px}
+.tab-badge{position:absolute;top:6px;right:calc(50% - 20px);background:var(--err);color:#fff;font-size:9px;font-weight:800;padding:1px 5px;border-radius:999px;min-width:16px;text-align:center}
+
+/* SCROLL */
+.scr{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch}
+.scr::-webkit-scrollbar{width:0}
+.pad{padding:14px}
+
+/* SEC TITLE */
+.sec-t{font-size:10px;font-weight:800;color:var(--ink3);text-transform:uppercase;letter-spacing:1.5px;margin:14px 4px 8px;display:flex;align-items:center;gap:6px}
+.sec-t::after{content:'';flex:1;height:1px;background:var(--border)}
+
+/* ROTA CARD */
+.rota-card{background:var(--card);border:1px solid var(--border);border-left:4px solid var(--teal);border-radius:14px;padding:14px;margin-bottom:10px;box-shadow:0 2px 8px rgba(0,0,0,.04);cursor:pointer;transition:transform .15s}
+.rota-card:active{transform:scale(.98)}
+.rota-card.faturando{border-left-color:var(--warn)}
+.rota-card.faturado{border-left-color:var(--ok);opacity:.75}
+.rota-h{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.rota-nome{font-size:14px;font-weight:800;color:var(--ink);flex:1}
+.rota-badge{font-size:9px;font-weight:800;padding:3px 8px;border-radius:999px;text-transform:uppercase}
+.b-aguardando{background:var(--teal-bg);color:#0f766e}
+.b-faturando{background:var(--warn-bg);color:#9a3412}
+.b-faturado{background:var(--ok-bg);color:#15803d}
+.b-erro{background:var(--err-bg);color:#991b1b}
+.rota-mot{font-size:12px;color:var(--ink2);font-weight:600;margin-bottom:2px}
+.rota-info{font-size:11px;color:var(--ink3)}
+.rota-stats{display:flex;gap:10px;margin-top:10px;padding-top:10px;border-top:1px dashed var(--border)}
+.rota-stat{flex:1;text-align:center}
+.rota-stat-l{font-size:9px;color:var(--ink3);text-transform:uppercase;letter-spacing:.5px;font-weight:700}
+.rota-stat-v{font-size:14px;font-weight:800;color:var(--ink);margin-top:2px}
+
+/* DETALHE ROTA */
+.det-hdr{background:linear-gradient(135deg,var(--navy),var(--navy2));padding:14px 14px 10px;color:#fff;flex-shrink:0}
+.det-rota{font-family:'Playfair Display',serif;font-style:italic;font-size:16px;font-weight:700;color:var(--gold);margin-bottom:2px}
+.det-mot{font-size:12px;color:rgba(255,255,255,.85);font-weight:600}
+.det-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
+.det-item{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);border-radius:8px;padding:7px;text-align:center}
+.det-l{font-size:9px;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:.4px;font-weight:700}
+.det-v{font-size:13px;font-weight:800;color:#fff;margin-top:2px}
+
+/* PEDIDO CARD */
+.ped-card{background:var(--card);border:1px solid var(--border);border-radius:12px;margin-bottom:10px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.04)}
+.ped-card.p-ok{border-color:rgba(22,163,74,.4)}
+.ped-card.p-err{border-color:rgba(220,38,38,.4)}
+.ped-card.p-fat{border-color:rgba(13,148,136,.4);opacity:.8}
+.ped-h{padding:12px;display:flex;align-items:center;gap:8px;cursor:pointer}
+.ped-num{background:var(--ink);color:#fff;border-radius:6px;padding:3px 7px;font-size:10px;font-weight:800;font-family:monospace;flex-shrink:0}
+.ped-emp{background:var(--teal-bg);color:var(--teal);border-radius:6px;padding:3px 7px;font-size:9px;font-weight:800;flex-shrink:0}
+.ped-tipo{font-size:9px;font-weight:800;padding:2px 7px;border-radius:6px;flex-shrink:0;margin-left:4px}
+.ped-tipo.venda{background:rgba(22,163,74,.1);color:#15803d}
+.ped-tipo.amostra{background:rgba(234,88,12,.1);color:#9a3412}
+.ped-tipo.bonificacao{background:rgba(124,58,237,.1);color:#5b21b6}
+.ped-tipo.licitacao{background:rgba(29,78,216,.1);color:#1e40af}
+.ped-cli{flex:1;min-width:0}
+.ped-cli-n{font-size:12.5px;font-weight:700;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ped-cli-c{font-size:10.5px;color:var(--ink3);margin-top:2px}
+.ped-status{font-size:20px;flex-shrink:0}
+.ped-arrow{font-size:12px;color:var(--ink4);transition:transform .2s;flex-shrink:0}
+.ped-card.open .ped-arrow{transform:rotate(180deg)}
+.ped-body{padding:0 12px 12px;border-top:1px solid var(--border);display:none}
+.ped-card.open .ped-body{display:block}
+
+/* ITENS */
+.itens-list{margin:10px 0;background:var(--bg);border-radius:8px;overflow:hidden}
+.item-hdr{display:grid;grid-template-columns:60px 1fr 50px 70px 60px;gap:4px;padding:6px 10px;background:var(--ink);color:#fff;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.4px}
+.item-row{display:grid;grid-template-columns:60px 1fr 50px 70px 60px;gap:4px;padding:8px 10px;border-bottom:1px solid var(--border);align-items:center;font-size:11px}
+.item-row:last-child{border-bottom:none}
+.item-row.est-ok{background:rgba(22,163,74,.04)}
+.item-row.est-err{background:rgba(220,38,38,.04)}
+.item-sku{font-family:monospace;font-size:10px;font-weight:700;color:var(--info);word-break:break-all}
+.item-desc{color:var(--ink2);line-height:1.3}
+.item-qtd{font-weight:800;color:var(--ink);text-align:right}
+.item-est{font-weight:700;text-align:right}
+.item-est.ok{color:var(--ok)}
+.item-est.err{color:var(--err)}
+.item-est.nd{color:var(--ink4)}
+.item-fifo{font-size:9px;font-weight:700;text-align:right}
+.item-fifo.ok{color:var(--ok)}
+.item-fifo.err{color:var(--err)}
+
+/* NF STATUS */
+.nf-box{background:var(--ok-bg);border:1px solid rgba(22,163,74,.25);border-radius:10px;padding:10px 12px;margin-top:10px;font-size:12px}
+.nf-box.err{background:var(--err-bg);border-color:rgba(220,38,38,.25)}
+.nf-box.loading{background:var(--info-bg);border-color:rgba(29,78,216,.25)}
+.nf-titulo{font-weight:800;margin-bottom:4px}
+.nf-titulo.ok{color:var(--ok)}
+.nf-titulo.err{color:var(--err)}
+.nf-titulo.loading{color:var(--info)}
+.nf-detalhe{color:var(--ink2);font-size:11px;line-height:1.5}
+
+/* AÇÕES PEDIDO */
+.ped-acoes{display:flex;gap:8px;margin-top:12px}
+.btn-fat{flex:1;padding:10px;border-radius:10px;border:none;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;background:linear-gradient(135deg,var(--teal),#0f766e);color:#fff}
+.btn-fat:active{transform:scale(.97)}
+.btn-fat:disabled{background:#cbd5e1;color:#64748b;cursor:not-allowed}
+.btn-fat-outline{flex:1;padding:10px;border-radius:10px;border:1px solid var(--border);background:#fff;color:var(--ink2);font-family:inherit;font-weight:700;font-size:12px;cursor:pointer}
+
+/* FOOTER */
+.footer{flex-shrink:0;background:#fff;border-top:1px solid var(--border);padding:10px 14px;box-shadow:0 -4px 12px rgba(0,0,0,.06);display:flex;gap:8px}
+.btn-rod{flex:1;padding:13px;border-radius:11px;border:none;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer}
+.btn-rod:active{transform:scale(.98)}
+.btn-rod:disabled{background:#cbd5e1;color:#64748b;cursor:not-allowed;transform:none}
+.btn-fat-todos{background:linear-gradient(135deg,var(--teal),#0f766e);color:#fff;flex:2}
+.btn-mdfe{background:linear-gradient(135deg,var(--purple),#6d28d9);color:#fff}
+
+/* MODAL */
+.modal{position:fixed;inset:0;z-index:1000;background:rgba(10,15,40,.65);backdrop-filter:blur(6px);display:none;align-items:flex-end;justify-content:center}
+.modal.on{display:flex}
+.modal-card{background:#fff;width:100%;max-width:500px;border-radius:18px 18px 0 0;padding:20px 18px 32px;max-height:85vh;overflow-y:auto}
+.modal-t{font-size:16px;font-weight:800;color:var(--ink);margin-bottom:4px}
+.modal-sub{font-size:12px;color:var(--ink3);margin-bottom:16px;line-height:1.5}
+.campo-label{font-size:11px;font-weight:700;color:var(--ink2);margin-bottom:4px;display:block}
+.campo-input{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:9px;font-family:inherit;font-size:13px;background:#fff;color:var(--ink);outline:none;margin-bottom:12px}
+.campo-input:focus{border-color:var(--teal)}
+.campo-select{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:9px;font-family:inherit;font-size:13px;background:#fff;color:var(--ink);outline:none;margin-bottom:12px}
+.campo-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.modal-acoes{display:flex;gap:8px;margin-top:8px}
+.mbtn{flex:1;padding:12px;border-radius:10px;border:none;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer}
+.mbtn-c{background:var(--bg);color:var(--ink2)}
+.mbtn-ok{background:linear-gradient(135deg,var(--teal),#0f766e);color:#fff;flex:2}
+.mbtn-mdfe{background:linear-gradient(135deg,var(--purple),#6d28d9);color:#fff;flex:2}
+
+/* PROGRESSO */
+.progress-wrap{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;margin:10px 0}
+.progress-label{font-size:11px;font-weight:700;color:var(--ink2);margin-bottom:6px;display:flex;justify-content:space-between}
+.progress-bar{height:6px;background:#e2e8f0;border-radius:3px;overflow:hidden}
+.progress-fill{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--teal),#0f766e);transition:width .4s}
+.progress-log{max-height:120px;overflow-y:auto;margin-top:8px;font-size:11px;color:var(--ink3);line-height:1.8}
+.log-ok{color:var(--ok)}
+.log-err{color:var(--err)}
+.log-info{color:var(--info)}
+
+/* VAZIO */
+.vazio{text-align:center;padding:50px 20px;color:var(--ink3);font-size:13px;line-height:1.6}
+.vazio .ico{font-size:48px;margin-bottom:12px;opacity:.4}
+
+/* TOAST */
+.toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 18px;border-radius:999px;font-size:12.5px;font-weight:600;z-index:2000;box-shadow:0 8px 24px rgba(0,0,0,.3);opacity:0;pointer-events:none;transition:opacity .2s;white-space:nowrap;max-width:90vw;text-align:center}
+.toast.on{opacity:1}
+
+/* LOADING */
+#loading{position:fixed;inset:0;background:rgba(10,15,40,.7);z-index:3000;display:none;align-items:center;justify-content:center;flex-direction:column;gap:14px;color:#fff;font-size:13px;font-weight:600;text-align:center;padding:20px}
+#loading.on{display:flex}
+.spinner{width:40px;height:40px;border:4px solid rgba(255,255,255,.2);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.tela{display:none}
+.tela.on{display:flex;flex-direction:column;flex:1;min-height:0}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="hdr">
+  <div class="hdr-back" onclick="voltarLista()">←</div>
+  <div class="hdr-title">
+    <div class="hdr-t1" id="hdr-t1">Faturamento</div>
+    <div class="hdr-t2" id="hdr-t2">Rotas aguardando faturamento</div>
+  </div>
+  <div class="hdr-user"><span id="hdr-nome">—</span></div>
+</div>
+
+<!-- TELA: LISTA -->
+<div class="tela on" id="tela-lista">
+  <!-- TABS -->
+  <div class="tab-bar">
+    <button class="tab-btn ativa" id="tab-aguardando" onclick="mudarAba('aguardando')">
+      <span class="ico">🧾</span>Aguardando
+      <span class="tab-badge" id="badge-aguardando" style="display:none">0</span>
+    </button>
+    <button class="tab-btn" id="tab-faturando" onclick="mudarAba('faturando')">
+      <span class="ico">⚙️</span>Em Faturamento
+      <span class="tab-badge" id="badge-faturando" style="display:none">0</span>
+    </button>
+    <button class="tab-btn" id="tab-faturado" onclick="mudarAba('faturado')">
+      <span class="ico">✅</span>Faturados
+    </button>
+  </div>
+  <div class="scr"><div class="pad" id="lista-content">
+    <div class="vazio"><div class="ico">⏳</div>Carregando...</div>
+  </div></div>
+</div>
+
+<!-- TELA: DETALHE -->
+<div class="tela" id="tela-det">
+  <div class="det-hdr" id="det-hdr"></div>
+  <div class="scr"><div class="pad" id="det-content"></div></div>
+  <div class="footer" id="det-footer"></div>
+</div>
+
+<!-- MODAL: MDF-e -->
+<div class="modal" id="modal-mdfe">
+  <div class="modal-card">
+    <div class="modal-t">🚚 Emitir MDF-e</div>
+    <div class="modal-sub">Manifesto de Documentos Fiscais Eletrônicos para o transporte desta rota. Preencha os dados do veículo e condutor.</div>
+
+    <div class="progress-wrap" id="mdfe-nfs-info" style="display:none">
+      <div class="progress-label"><span>NF-es desta rota</span></div>
+      <div class="progress-log" id="mdfe-lista-nfs"></div>
+    </div>
+
+    <label class="campo-label">Tipo de Emitente</label>
+    <select class="campo-select" id="mdfe-tipo-emit">
+      <option value="1">Prestador de Serviço de Transporte</option>
+      <option value="2">Transportador de Carga Própria</option>
+    </select>
+
+    <div class="campo-row">
+      <div>
+        <label class="campo-label">UF Carregamento</label>
+        <input class="campo-input" id="mdfe-uf-ini" placeholder="Ex: SP" maxlength="2" style="text-transform:uppercase">
+      </div>
+      <div>
+        <label class="campo-label">UF Descarregamento</label>
+        <input class="campo-input" id="mdfe-uf-fim" placeholder="Ex: RJ" maxlength="2" style="text-transform:uppercase">
+      </div>
+    </div>
+
+    <label class="campo-label">Placa do Veículo</label>
+    <input class="campo-input" id="mdfe-placa" placeholder="Ex: ABC1234" maxlength="8" style="text-transform:uppercase">
+
+    <label class="campo-label">RNTRC (Registro ANTT)</label>
+    <input class="campo-input" id="mdfe-rntrc" placeholder="Número RNTRC do veículo">
+
+    <label class="campo-label">CPF do Condutor</label>
+    <input class="campo-input" id="mdfe-cpf" placeholder="Somente números">
+
+    <label class="campo-label">Nome do Condutor</label>
+    <input class="campo-input" id="mdfe-condutor" placeholder="Nome completo">
+
+    <label class="campo-label">Peso Total Bruto (kg)</label>
+    <input class="campo-input" id="mdfe-peso" type="number" placeholder="0">
+
+    <div class="modal-acoes">
+      <button class="mbtn mbtn-c" onclick="fecharModal('modal-mdfe')">Cancelar</button>
+      <button class="mbtn mbtn-mdfe" onclick="emitirMDFe()">🚚 Emitir MDF-e</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: CONFIRMAR FAT TODOS -->
+<div class="modal" id="modal-confirmar">
+  <div class="modal-card">
+    <div class="modal-t" id="mc-titulo">Faturar todos os pedidos?</div>
+    <div class="modal-sub" id="mc-sub">O sistema irá faturar automaticamente todos os pedidos desta rota via API Omie, gerando as NF-es com base no estoque disponível (FIFO).</div>
+    <div class="progress-wrap" id="mc-progress" style="display:none">
+      <div class="progress-label">
+        <span id="mc-prog-label">Processando...</span>
+        <span id="mc-prog-pct">0%</span>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" id="mc-prog-bar" style="width:0%"></div></div>
+      <div class="progress-log" id="mc-log"></div>
+    </div>
+    <div class="modal-acoes" id="mc-acoes">
+      <button class="mbtn mbtn-c" onclick="fecharModal('modal-confirmar')">Cancelar</button>
+      <button class="mbtn mbtn-ok" onclick="executarFaturarTodos()">✓ Confirmar e Faturar</button>
+    </div>
+  </div>
+</div>
+
+<div id="loading"><div class="spinner"></div><span id="loading-txt">Carregando...</span></div>
+<div class="toast" id="toast"></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { getDatabase, ref, onValue, update, set } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+const FB_CFG = {
+  apiKey:"AIzaSyAch7_Sn4jq1cuTGV1ijGsDGUXC9dyilOs",
+  authDomain:"mfparis-bd054.firebaseapp.com",
+  databaseURL:"https://mfparis-bd054-default-rtdb.firebaseio.com",
+  projectId:"mfparis-bd054",
+  storageBucket:"mfparis-bd054.firebasestorage.app",
+  messagingSenderId:"106506342977",
+  appId:"1:106506342977:web:cda4d2d0f3296c4284ecc0"
+};
+
+const CREDENCIAIS = {
+  'MF Paris': { key:'952260381072',  secret:'8300b385eeec583c71439709ab866fc7' },
+  'MFP':      { key:'952260381072',  secret:'8300b385eeec583c71439709ab866fc7' },
+  'DMS':      { key:'1340821992510', secret:'dac287f9b3ec422dc93da6cdbcc3e0b2' },
+  'Profi':    { key:'6625695374298', secret:'588e34aa9429edcae86f5e87c47a65df' },
+  'PRF':      { key:'6625695374298', secret:'588e34aa9429edcae86f5e87c47a65df' },
+};
+
+const app  = initializeApp(FB_CFG);
+const auth = getAuth(app);
+const db   = getDatabase(app);
+
+let usuario = null;
+let DTS = {};
+let abaAtual = 'aguardando';
+let dtAtual = null; // token da rota em detalhe
+let pedidosDetalhe = []; // pedidos com dados enriquecidos
+let _toastTm = null;
+
+// ── AUTH ──────────────────────────────────────────────────────────────────────
+onAuthStateChanged(auth, u => {
+  if (u) {
+    usuario = { uid: u.uid, email: u.email, nome: u.displayName || u.email };
+    document.getElementById('hdr-nome').textContent = usuario.nome;
+  }
+});
+
+// ── FIREBASE ──────────────────────────────────────────────────────────────────
+onValue(ref(db, 'despachos'), snap => {
+  DTS = snap.val() || {};
+  if (dtAtual) renderDetalhe(dtAtual);
+  else renderLista();
+});
+
+function fbUpd(path, data) { return update(ref(db, path), data); }
+function fbSet(path, data) { return set(ref(db, path), data); }
+
+// ── OMIE API ──────────────────────────────────────────────────────────────────
+async function omieCall(empresa, endpoint, call, param, retry=false) {
+  const cred = CREDENCIAIS[empresa] || CREDENCIAIS['MF Paris'];
+  const resp = await fetch('/api/omie', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ endpoint, payload: { call, app_key: cred.key, app_secret: cred.secret, param } })
+  });
+  if (!resp.ok) throw new Error('HTTP ' + resp.status);
+  const data = await resp.json();
+  if (data.faultstring) {
+    if (data.faultstring.includes('REDUNDANT') && !retry) {
+      const m = data.faultstring.match(/Aguarde (\d+) segundo/);
+      await sleep(((m ? parseInt(m[1]) : 35) + 3) * 1000);
+      return omieCall(empresa, endpoint, call, param, true);
+    }
+    throw new Error(data.faultstring);
+  }
+  return data;
+}
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// ── UTILITÁRIOS ───────────────────────────────────────────────────────────────
+function toast(msg, tipo='ok') {
+  clearTimeout(_toastTm);
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast on';
+  _toastTm = setTimeout(() => el.className = 'toast', tipo === 'err' ? 4000 : 2500);
+}
+
+function loading(msg) {
+  document.getElementById('loading').classList.add('on');
+  document.getElementById('loading-txt').textContent = msg || 'Processando...';
+}
+function esconderLoading() { document.getElementById('loading').classList.remove('on'); }
+
+function fmtMoeda(v) { return 'R$ ' + Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function fmtPeso(v) { return Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1}) + ' kg'; }
+
+function fecharModal(id) { document.getElementById(id).classList.remove('on'); }
+function abrirModal(id) { document.getElementById(id).classList.add('on'); }
+
+function mostrarTela(id) {
+  document.querySelectorAll('.tela').forEach(t => t.classList.remove('on'));
+  document.getElementById(id).classList.add('on');
+}
+
+// ── ABAS ──────────────────────────────────────────────────────────────────────
+window.mudarAba = function(aba) {
+  abaAtual = aba;
+  ['aguardando','faturando','faturado'].forEach(a => {
+    document.getElementById('tab-' + a).classList.toggle('ativa', a === aba);
+  });
+  renderLista();
+};
+
+// ── LISTA ──────────────────────────────────────────────────────────────────────
+function renderLista() {
+  mostrarTela('tela-lista');
+  document.getElementById('hdr-t1').textContent = 'Faturamento';
+  document.getElementById('hdr-t2').textContent = 'Rotas aguardando faturamento';
+  dtAtual = null;
+
+  // Entra em faturamento assim que a separação é confirmada (statusFluxo 'separado' ou posterior)
+  const STATUS_POS_SEP = ['separado','em_carregamento','carregado','despachado','em_transito'];
+  const filtros = {
+    aguardando: dt => STATUS_POS_SEP.includes(dt.statusFluxo) && !dt.faturamento?.status,
+    faturando:  dt => dt.faturamento?.status === 'faturando',
+    faturado:   dt => dt.faturamento?.status === 'faturado',
+  };
+
+  const lista = Object.entries(DTS)
+    .filter(([,dt]) => filtros[abaAtual]?.(dt))
+    .sort(([,a],[,b]) => (b.tsDespacho||0) - (a.tsDespacho||0));
+
+  // Badges
+  const nAg = Object.values(DTS).filter(filtros.aguardando).length;
+  const nFt = Object.values(DTS).filter(filtros.faturando).length;
+  const bAg = document.getElementById('badge-aguardando');
+  const bFt = document.getElementById('badge-faturando');
+  bAg.style.display = nAg > 0 ? '' : 'none'; bAg.textContent = nAg;
+  bFt.style.display = nFt > 0 ? '' : 'none'; bFt.textContent = nFt;
+
+  const cont = document.getElementById('lista-content');
+  if (!lista.length) {
+    const msgs = {
+      aguardando: 'Nenhuma rota aguardando faturamento.<br><small>Rotas aparecem aqui após confirmação do carregamento.</small>',
+      faturando: 'Nenhuma rota em processamento.',
+      faturado: 'Nenhuma rota faturada ainda.',
+    };
+    cont.innerHTML = `<div class="vazio"><div class="ico">${abaAtual==='faturado'?'✅':'🧾'}</div>${msgs[abaAtual]}</div>`;
+    return;
+  }
+
+  cont.innerHTML = lista.map(([tk, dt]) => {
+    const nPeds = (dt.paradas||[]).length;
+    const st = dt.faturamento?.status || 'aguardando';
+    const nfCount = dt.faturamento?.nfs ? Object.keys(dt.faturamento.nfs).length : 0;
+    const badge = { aguardando:'Aguardando', faturando:'Faturando', faturado:'Faturado', erro:'Erro' };
+    const emb = dt.emb ? new Date(dt.emb + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
+    return `
+    <div class="rota-card ${st}" onclick="abrirRota('${tk}')">
+      <div class="rota-h">
+        <div class="rota-nome">${dt.nomeRota||'—'}</div>
+        <div class="rota-badge b-${st}">${badge[st]||st}</div>
+      </div>
+      <div class="rota-mot">🚗 ${dt.motoristaNome||'—'} · <span style="font-family:monospace">${dt.motoristaPlaca||'—'}</span></div>
+      <div class="rota-info">📦 ${dt.motoristaVeiculo||'—'} · ${emb}</div>
+      <div class="rota-stats">
+        <div class="rota-stat"><div class="rota-stat-l">Pedidos</div><div class="rota-stat-v">${nPeds}</div></div>
+        <div class="rota-stat"><div class="rota-stat-l">Peso</div><div class="rota-stat-v">${fmtPeso(dt.totalPeso)}</div></div>
+        <div class="rota-stat"><div class="rota-stat-l">${st==='faturado'?'NF-es':'Valor'}</div><div class="rota-stat-v">${st==='faturado'?nfCount:fmtMoeda((dt.paradas||[]).reduce((s,p)=>s+(p.valor_total||0),0))}</div></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── DETALHE ──────────────────────────────────────────────────────────────────
+window.abrirRota = async function(token) {
+  dtAtual = token;
+  mostrarTela('tela-det');
+  document.getElementById('hdr-t1').textContent = 'Faturamento';
+  document.getElementById('det-content').innerHTML = '<div class="vazio"><div class="ico">⏳</div>Carregando pedidos e estoque...</div>';
+  document.getElementById('det-footer').innerHTML = '';
+  renderDetalheCabecalho(token);
+
+  const dt = DTS[token];
+  const paradas = dt?.paradas || [];
+  const rastrosTodos = dt?.separacao?.rastros || {};
+
+  // Usa a rastreabilidade (lote/fabricação/validade) informada na separação —
+  // dados reais do produto separado, sem necessidade de estimativa por FIFO de estoque.
+  pedidosDetalhe = paradas.map((p, i) => {
+    const itensComRastro = montarItensComRastro(p, rastrosTodos[i] || {});
+    const status = itensComRastro.length && itensComRastro.every(it => it.rastreado) ? 'ok' : 'insuf';
+    return { ...p, _estoqueStatus: status, _itensEst: itensComRastro, _classificacao: classificarPedido(p) };
+  });
+  renderDetalhe(token);
+};
+
+// Classifica o pedido (venda normal, amostra, bonificação, licitação) com base
+// nos dados reais do pedido vindos do Omie/carteira — cada caso exige tratamento
+// fiscal diferente na hora de faturar (NF com ou sem valor comercial, CFOP etc.)
+function classificarPedido(p) {
+  const seg = String(p.segmento || p._segmento || '').toUpperCase();
+  const valor = Number(p.valor_total || 0);
+  const obs = String(p._obs_atual || p.observacoes || '').toLowerCase();
+  if (seg === 'AMOSTRA' || obs.includes('amostra')) {
+    return { tipo: 'amostra', label: '🎁 Amostra', desc: 'Remessa de amostra sem valor comercial — confirme antes de faturar.' };
+  }
+  if (obs.includes('bonific') || (valor === 0 && (p.itens || []).some(it => (it.quantidade || it.qtd || 0) > 0))) {
+    return { tipo: 'bonificacao', label: '🎀 Bonificação', desc: 'Pedido sem cobrança — confirme o motivo antes de faturar.' };
+  }
+  if (seg === 'LICITACAO') {
+    return { tipo: 'licitacao', label: '📋 Licitação', desc: 'Pedido de licitação — verifique condições contratuais específicas.' };
+  }
+  return { tipo: 'venda', label: '💰 Venda', desc: '' };
+}
+
+function montarItensComRastro(p, rastros) {
+  const itens = p.itens && p.itens.length ? p.itens : [];
+  return itens.map((it, j) => {
+    const r = rastros[j] || {};
+    const rastreado = !!(r.lote || r.val);
+    return { ...it, lote: r.lote || '', fab: r.fab || '', val: r.val || '', rastreado, estoqueOk: rastreado };
+  });
+}
+
+function renderDetalheCabecalho(token) {
+  const dt = DTS[token] || {};
+  const paradas = dt.paradas || [];
+  const valorTotal = paradas.reduce((s,p) => s+(p.valor_total||0), 0);
+  const nfCount = dt.faturamento?.nfs ? Object.keys(dt.faturamento.nfs).length : 0;
+  document.getElementById('det-hdr').innerHTML = `
+    <div class="det-rota">${dt.nomeRota||'—'}</div>
+    <div class="det-mot">🚗 ${dt.motoristaNome||'—'} · ${dt.motoristaPlaca||'—'} · ${dt.motoristaVeiculo||'—'}</div>
+    <div class="det-grid">
+      <div class="det-item"><div class="det-l">Pedidos</div><div class="det-v">${paradas.length}</div></div>
+      <div class="det-item"><div class="det-l">Peso Total</div><div class="det-v">${fmtPeso(dt.totalPeso)}</div></div>
+      <div class="det-item"><div class="det-l">Valor Total</div><div class="det-v">${fmtMoeda(valorTotal)}</div></div>
+      <div class="det-item"><div class="det-l">Data Emb.</div><div class="det-v">${dt.emb||'—'}</div></div>
+      <div class="det-item"><div class="det-l">NF-es</div><div class="det-v">${nfCount}</div></div>
+      <div class="det-item"><div class="det-l">MDF-e</div><div class="det-v">${dt.faturamento?.mdfe?.numero||'—'}</div></div>
+    </div>`;
+}
+
+function renderDetalhe(token) {
+  if (!dtAtual || dtAtual !== token) return;
+  const dt = DTS[token] || {};
+  renderDetalheCabecalho(token);
+
+  const fat = dt.faturamento || {};
+  const isFaturado = fat.status === 'faturado';
+
+  let html = '';
+  pedidosDetalhe.forEach((p, i) => {
+    const nfInfo = fat.nfs?.[p._codigo_pedido || p.codigo_pedido];
+    const estSt = p._estoqueStatus;
+    const cardCls = nfInfo ? 'p-fat' : (estSt === 'ok' ? 'p-ok' : estSt === 'insuf' ? 'p-err' : '');
+    const statusIco = nfInfo ? '✅' : (estSt === 'loading' ? '⏳' : estSt === 'ok' ? '🟢' : estSt === 'insuf' ? '🔴' : '⚠️');
+    const empresa = p._empresa || p.empresa || '—';
+
+    html += `<div class="ped-card ${cardCls}" id="ped-card-${i}">
+      <div class="ped-h" onclick="togglePed(${i})">
+        <div class="ped-num">#${p.pedido||p.numero_pedido||'—'}</div>
+        <div class="ped-emp">${empresa}</div>
+        <div class="ped-tipo ${p._classificacao.tipo}">${p._classificacao.label}</div>
+        <div class="ped-cli">
+          <div class="ped-cli-n">${p.cliente||p.cliente_nome||'—'}</div>
+          <div class="ped-cli-c">${p.cidade||p.cliente_cidade||'—'} · ${fmtMoeda(p.valor_total)}</div>
+        </div>
+        <div class="ped-status">${statusIco}</div>
+        <div class="ped-arrow">▼</div>
+      </div>
+      <div class="ped-body">`;
+
+    // Itens com estoque FIFO
+    if (p._itensEst && p._itensEst.length) {
+      html += `<div class="itens-list">
+        <div class="item-hdr"><div>SKU</div><div>Produto</div><div>Pedido</div><div>Lote/Val.</div><div>Rastreio</div></div>
+        ${p._itensEst.map(it => `
+        <div class="item-row ${it.rastreado ? 'est-ok' : 'est-err'}">
+          <div class="item-sku">${it.sku||'—'}</div>
+          <div class="item-desc">${(it.descricao||it.produto||'—').slice(0,40)}</div>
+          <div class="item-qtd">${Number(it.quantidade||0).toLocaleString('pt-BR',{minimumFractionDigits:1})}</div>
+          <div class="item-est ${it.rastreado?'ok':'err'}">${it.lote||'—'}${it.val?' · '+it.val:''}</div>
+          <div class="item-fifo ${it.rastreado?'ok':'err'}">${it.rastreado?'✓ OK':'✗ Sem lote'}</div>
+        </div>`).join('')}
+      </div>`;
+    }
+
+    // Status NF-e
+    if (nfInfo) {
+      const lotesNf = (nfInfo.rastreabilidade||[]).filter(r=>r.lote||r.val).map(r=>`${r.sku||'—'}: lote ${r.lote||'—'}${r.val?' · val '+r.val:''}`).join('<br>');
+      html += `<div class="nf-box">
+        <div class="nf-titulo ok">✅ NF-e Emitida</div>
+        <div class="nf-detalhe">NF Nº <strong>${nfInfo.numero_nf||'—'}</strong> · Série ${nfInfo.serie||'—'} · Chave: <span style="font-family:monospace;font-size:10px">${nfInfo.chave_nf||'—'}</span></div>
+        ${lotesNf ? `<div class="nf-detalhe" style="margin-top:4px;font-size:10.5px">${lotesNf}</div>` : ''}
+      </div>`;
+    } else if (!isFaturado) {
+      html += `<div class="ped-acoes">
+        <button class="btn-fat" onclick="faturarPedido(${i})" ${estSt==='loading'?'disabled':''}>
+          🧾 Faturar este pedido
+        </button>
+      </div>`;
+    }
+
+    html += '</div></div>';
+  });
+
+  document.getElementById('det-content').innerHTML = html || '<div class="vazio"><div class="ico">📭</div>Sem pedidos nesta rota.</div>';
+
+  // Footer
+  const algumNaoFaturado = pedidosDetalhe.some(p => !fat.nfs?.[p._codigo_pedido || p.codigo_pedido]);
+  const temNFs = fat.nfs && Object.keys(fat.nfs).length > 0;
+
+  let footerHtml = '';
+  if (!isFaturado && algumNaoFaturado) {
+    footerHtml += `<button class="btn-rod btn-fat-todos" onclick="confirmarFaturarTodos()">🧾 Faturar Todos</button>`;
+  }
+  if (temNFs && !fat.mdfe?.numero) {
+    footerHtml += `<button class="btn-rod btn-mdfe" onclick="abrirMDFe()">🚚 MDF-e</button>`;
+  }
+  document.getElementById('det-footer').innerHTML = footerHtml;
+}
+
+window.togglePed = function(i) {
+  const card = document.getElementById('ped-card-' + i);
+  if (card) card.classList.toggle('open');
+};
+
+// ── FATURAR PEDIDO INDIVIDUAL ─────────────────────────────────────────────────
+window.faturarPedido = async function(i) {
+  const p = pedidosDetalhe[i];
+  if (!p) return;
+  if (p._classificacao && p._classificacao.tipo !== 'venda') {
+    const ok = confirm(`${p._classificacao.label} — Pedido #${p.pedido||p.numero_pedido}\n\n${p._classificacao.desc}\n\nConfirma o faturamento deste pedido nessas condições?`);
+    if (!ok) return;
+  }
+  loading('Faturando pedido #' + (p.pedido||p.numero_pedido) + '...');
+  try {
+    const nfInfo = await executarFaturamento(p);
+    const key = p._codigo_pedido || p.codigo_pedido || ('p' + i);
+    await fbUpd('despachos/' + dtAtual + '/faturamento', {
+      status: 'faturando',
+      [`nfs/${key}`]: nfInfo
+    });
+    toast('✅ NF-e ' + nfInfo.numero_nf + ' emitida!', 'ok');
+  } catch(e) {
+    toast('❌ ' + e.message, 'err');
+  } finally {
+    esconderLoading();
+  }
+};
+
+// ── FATURAR TODOS ─────────────────────────────────────────────────────────────
+window.confirmarFaturarTodos = function() {
+  const dt = DTS[dtAtual] || {};
+  const naoFaturados = pedidosDetalhe.filter(p => !dt.faturamento?.nfs?.[p._codigo_pedido || p.codigo_pedido]);
+  const especiais = naoFaturados.filter(p => p._classificacao && p._classificacao.tipo !== 'venda');
+  document.getElementById('mc-titulo').textContent = `Faturar ${naoFaturados.length} pedido(s)?`;
+  let sub = `O sistema irá faturar automaticamente ${naoFaturados.length} pedido(s) desta rota via API Omie, com base no lote/validade informados na separação.`;
+  if (especiais.length) {
+    sub += ` ⚠️ ${especiais.length} pedido(s) identificados como ${especiais.map(p=>p._classificacao.label).filter((v,i,a)=>a.indexOf(v)===i).join(', ')} — confira antes de prosseguir.`;
+  }
+  document.getElementById('mc-sub').textContent = sub;
+  document.getElementById('mc-progress').style.display = 'none';
+  document.getElementById('mc-acoes').style.display = '';
+  abrirModal('modal-confirmar');
+};
+
+window.executarFaturarTodos = async function() {
+  document.getElementById('mc-acoes').style.display = 'none';
+  document.getElementById('mc-progress').style.display = '';
+  const logEl = document.getElementById('mc-log');
+  const barEl = document.getElementById('mc-prog-bar');
+  const pctEl = document.getElementById('mc-prog-pct');
+  const lblEl = document.getElementById('mc-prog-label');
+
+  const dt = DTS[dtAtual] || {};
+  const naoFaturados = pedidosDetalhe.filter(p => !dt.faturamento?.nfs?.[p._codigo_pedido || p.codigo_pedido]);
+
+  await fbUpd('despachos/' + dtAtual + '/faturamento', { status: 'faturando', iniciado_em: Date.now(), iniciado_por: usuario?.nome || '—' });
+
+  let ok = 0, err = 0;
+  for (let i = 0; i < naoFaturados.length; i++) {
+    const p = naoFaturados[i];
+    const pct = Math.round((i / naoFaturados.length) * 100);
+    barEl.style.width = pct + '%';
+    pctEl.textContent = pct + '%';
+    lblEl.textContent = `Faturando ${i+1}/${naoFaturados.length}: #${p.pedido||p.numero_pedido}`;
+    logEl.innerHTML += `<div class="log-info">⏳ Pedido #${p.pedido||p.numero_pedido} — ${p.cliente||p.cliente_nome||'—'}...</div>`;
+    logEl.scrollTop = logEl.scrollHeight;
+
+    try {
+      const nfInfo = await executarFaturamento(p);
+      const key = p._codigo_pedido || p.codigo_pedido || ('p_' + i);
+      await fbUpd('despachos/' + dtAtual + '/faturamento', { [`nfs/${key}`]: nfInfo });
+      logEl.innerHTML += `<div class="log-ok">✅ NF-e ${nfInfo.numero_nf} emitida — ${p.cliente||p.cliente_nome}</div>`;
+      ok++;
+    } catch(e) {
+      logEl.innerHTML += `<div class="log-err">❌ Erro: ${e.message}</div>`;
+      err++;
+    }
+    logEl.scrollTop = logEl.scrollHeight;
+    await sleep(800); // Respeita rate limit Omie
+  }
+
+  barEl.style.width = '100%';
+  pctEl.textContent = '100%';
+  lblEl.textContent = `Concluído: ${ok} faturado(s), ${err} erro(s)`;
+
+  if (err === 0) {
+    await fbUpd('despachos/' + dtAtual + '/faturamento', { status: 'faturado', finalizado_em: Date.now() });
+    logEl.innerHTML += `<div class="log-ok" style="font-weight:800;margin-top:8px">🎉 Faturamento concluído com sucesso!</div>`;
+  } else {
+    logEl.innerHTML += `<div class="log-err" style="font-weight:800;margin-top:8px">⚠ ${err} pedido(s) com erro. Verifique e fature individualmente.</div>`;
+  }
+
+  setTimeout(() => { fecharModal('modal-confirmar'); }, 2000);
+};
+
+// ── FATURAMENTO VIA API OMIE ──────────────────────────────────────────────────
+async function executarFaturamento(p) {
+  const empresa = p._empresa || p.empresa || 'MF Paris';
+  const codigoPedido = parseInt(p._codigo_pedido || p.codigo_pedido);
+  if (!codigoPedido) throw new Error('Pedido sem código Omie');
+
+  // 1. Fatura o pedido de venda no Omie
+  const resultFat = await omieCall(empresa,
+    'https://app.omie.com.br/api/v1/produtos/pedido/',
+    'FaturarPedidoVenda',
+    [{ codigo_pedido: codigoPedido, documento: { serie: '1' } }]
+  );
+
+  // 2. Aguarda processamento e consulta a NF gerada
+  await sleep(2000);
+  const resultPed = await omieCall(empresa,
+    'https://app.omie.com.br/api/v1/produtos/pedido/',
+    'ConsultarPedido',
+    [{ codigo_pedido: codigoPedido }]
+  );
+
+  const cab = resultPed.cabecalho || {};
+  const nfCod = cab.codigo_nf || resultFat.codigo_nf || null;
+
+  let numero_nf = '—', serie = '1', chave_nf = '', status_nf = 'pendente';
+
+  if (nfCod) {
+    // 3. Consulta detalhes da NF-e
+    try {
+      const resultNF = await omieCall(empresa,
+        'https://app.omie.com.br/api/v1/produtos/nf/',
+        'ConsultarNF',
+        [{ codigo_nf_omie: nfCod }]
+      );
+      const infNF = resultNF.infNFe || resultNF.compl || {};
+      numero_nf = resultNF.ide?.nNF || resultNF.numero_nf || nfCod;
+      serie     = resultNF.ide?.serie || '1';
+      chave_nf  = resultNF.protNFe?.infProt?.chNFe || resultNF.chave_nfe || '';
+      status_nf = resultNF.status || 'emitida';
+    } catch { /* usa defaults */ }
+  }
+
+  // Registra lote/fabricação/validade dos itens separados para rastreabilidade da NF-e
+  const rastreabilidade = (p._itensEst || []).map(it => ({
+    sku: it.sku || '', lote: it.lote || '', fab: it.fab || '', val: it.val || ''
+  }));
+
+  return {
+    codigo_nf_omie: nfCod,
+    numero_nf: String(numero_nf),
+    serie: String(serie),
+    chave_nf,
+    status_nf,
+    empresa,
+    rastreabilidade,
+    emitida_em: Date.now(),
+    emitida_por: usuario?.nome || '—'
+  };
+}
+
+// ── MDF-e ─────────────────────────────────────────────────────────────────────
+window.abrirMDFe = function() {
+  const dt = DTS[dtAtual] || {};
+  // Preenche placa automaticamente
+  document.getElementById('mdfe-placa').value = (dt.motoristaPlaca || '').replace(/[^A-Za-z0-9]/g,'').toUpperCase();
+  document.getElementById('mdfe-condutor').value = dt.motoristaNome || '';
+  document.getElementById('mdfe-peso').value = Math.round(dt.totalPeso || 0);
+
+  // Lista NF-es já emitidas
+  const nfs = dt.faturamento?.nfs || {};
+  const listaHtml = Object.values(nfs).map(nf =>
+    `<div class="${nf.chave_nf?'log-ok':'log-info'}">NF-e #${nf.numero_nf} — ${nf.empresa} ${nf.chave_nf?'✅':'⏳ sem chave'}</div>`
+  ).join('');
+  const temChaves = Object.values(nfs).some(nf => nf.chave_nf);
+  document.getElementById('mdfe-nfs-info').style.display = '';
+  document.getElementById('mdfe-lista-nfs').innerHTML = listaHtml || '<div class="log-info">Nenhuma NF-e com chave disponível ainda.</div>';
+
+  if (!temChaves) {
+    toast('⚠ Aguarde as NF-es serem autorizadas (chave disponível) antes de emitir o MDF-e.', 'err');
+  }
+
+  abrirModal('modal-mdfe');
+};
+
+window.emitirMDFe = async function() {
+  const dt = DTS[dtAtual] || {};
+  const nfs = dt.faturamento?.nfs || {};
+
+  const ufIni   = document.getElementById('mdfe-uf-ini').value.toUpperCase().trim();
+  const ufFim   = document.getElementById('mdfe-uf-fim').value.toUpperCase().trim();
+  const placa   = document.getElementById('mdfe-placa').value.toUpperCase().replace(/[^A-Z0-9]/g,'');
+  const rntrc   = document.getElementById('mdfe-rntrc').value.trim();
+  const cpf     = document.getElementById('mdfe-cpf').value.replace(/\D/g,'');
+  const condutor= document.getElementById('mdfe-condutor').value.trim();
+  const peso    = parseFloat(document.getElementById('mdfe-peso').value) || 0;
+
+  if (!ufIni || !ufFim || !placa || !rntrc || !cpf || !condutor) {
+    toast('❌ Preencha todos os campos obrigatórios', 'err'); return;
+  }
+
+  const chaves = Object.values(nfs).map(nf => nf.chave_nf).filter(Boolean);
+  if (!chaves.length) { toast('❌ Nenhuma NF-e com chave autorizada encontrada', 'err'); return; }
+
+  fecharModal('modal-mdfe');
+  loading('Emitindo MDF-e...');
+
+  try {
+    const empresa = pedidosDetalhe[0]?._empresa || 'MF Paris';
+    const hoje = new Date();
+    const dhEmi = hoje.toISOString().slice(0,19) + '-03:00';
+
+    const payload = [{
+      ide: {
+        cUF: ufToCode(ufIni),
+        tpAmb: '1',
+        tpEmit: document.getElementById('mdfe-tipo-emit').value,
+        mod: '58',
+        serie: '1',
+        nMDF: '',
+        dhEmi,
+        ufIni,
+        ufFim
+      },
+      emit: {},
+      infModal: {
+        rodoviario: {
+          RNTRC: rntrc,
+          veicTracao: { placa, prop: { RNTRC: rntrc } },
+          condutor: [{ xNome: condutor, CPF: cpf }]
+        }
+      },
+      infDoc: {
+        infMunDescarga: montarMunDescargas(dt.paradas || [], chaves)
+      },
+      tot: {
+        qCTe: '0',
+        qNFe: String(chaves.length),
+        qMDFe: '0',
+        vCarga: String((dt.paradas||[]).reduce((s,p)=>s+(p.valor_total||0),0).toFixed(2)),
+        cUnid: '01',
+        qCarga: String(peso.toFixed(4))
+      }
+    }];
+
+    const result = await omieCall(empresa,
+      'https://app.omie.com.br/api/v1/produtos/mdfe/',
+      'IncluirMDFe',
+      payload
+    );
+
+    const codigoMdfe = result.codigo_mdfe_omie || result.codigo || null;
+    let numero_mdfe = result.numero_mdfe || '—', chave_mdfe = '';
+
+    if (codigoMdfe) {
+      await sleep(3000);
+      try {
+        const res2 = await omieCall(empresa,
+          'https://app.omie.com.br/api/v1/produtos/mdfe/',
+          'EmitirMDFe',
+          [{ codigo_mdfe_omie: codigoMdfe }]
+        );
+        numero_mdfe = res2.numero_mdfe || numero_mdfe;
+        chave_mdfe  = res2.chave_mdfe || '';
+      } catch(e2) { console.warn('EmitirMDFe:', e2.message); }
+    }
+
+    await fbUpd('despachos/' + dtAtual + '/faturamento/mdfe', {
+      codigo_omie: codigoMdfe,
+      numero: numero_mdfe,
+      chave: chave_mdfe,
+      placa, condutor, ufIni, ufFim,
+      emitido_em: Date.now(),
+      emitido_por: usuario?.nome || '—'
+    });
+
+    toast('✅ MDF-e ' + numero_mdfe + ' emitido!', 'ok');
+  } catch(e) {
+    toast('❌ MDF-e: ' + e.message, 'err');
+  } finally {
+    esconderLoading();
+  }
+};
+
+function montarMunDescargas(paradas, chaves) {
+  // Agrupa por UF/cidade (simplificado — uma descarga por parada com NF)
+  const municipios = {};
+  paradas.forEach((p, i) => {
+    const cidade = p.cidade || p.cliente_cidade || 'Não informado';
+    const uf = p.estado || p.cliente_uf || 'SP';
+    const k = uf + '_' + cidade;
+    if (!municipios[k]) municipios[k] = { xMunDescarga: cidade, UFDescarga: uf, nfes: [] };
+    // Associa chave se disponível
+    if (chaves[i]) municipios[k].nfes.push({ chNFe: chaves[i] });
+  });
+  return Object.values(municipios).map(m => ({
+    cMunDescarga: '0000000',
+    xMunDescarga: m.xMunDescarga,
+    infNFe: m.nfes
+  }));
+}
+
+function ufToCode(uf) {
+  const map = {AC:'12',AL:'27',AP:'16',AM:'13',BA:'29',CE:'23',DF:'53',ES:'32',GO:'52',MA:'21',MT:'51',MS:'50',MG:'31',PA:'15',PB:'25',PR:'41',PE:'26',PI:'22',RJ:'33',RN:'24',RS:'43',RO:'11',RR:'14',SC:'42',SP:'35',SE:'28',TO:'17'};
+  return map[uf] || '35';
+}
+
+// ── NAVEGAÇÃO ─────────────────────────────────────────────────────────────────
+window.voltarLista = function() {
+  dtAtual = null;
+  pedidosDetalhe = [];
+  mostrarTela('tela-lista');
+  document.getElementById('hdr-t1').textContent = 'Faturamento';
+  document.getElementById('hdr-t2').textContent = 'Rotas aguardando faturamento';
+  renderLista();
+};
+</script>
+</body>
+</html>

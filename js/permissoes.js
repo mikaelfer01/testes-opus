@@ -49,6 +49,9 @@ export const PERMISSOES = {
   
   // Carteira
   'carteira.html':            ['admin', 'logistica', 'comercial'],
+
+  // Faturamento
+  'faturamento.html':         ['admin', 'logistica', 'comercial'],
   
   // Simuladores
   'simulador.html':           ['admin', 'logistica', 'comercial'],
