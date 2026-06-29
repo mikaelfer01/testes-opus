@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OPUS — Limpar Pedido do Firebase</title>
+<style>
+  body{font-family:'Inter',system-ui,sans-serif;background:#050912;color:#e8eaf3;margin:0;padding:24px;min-height:100vh}
+  h1{color:#e8c96a;font-size:18px;margin-bottom:4px}
+  .sub{color:#7a8fa8;font-size:12px;margin-bottom:24px}
+  .card{background:rgba(13,31,60,.8);border:1px solid rgba(184,144,42,.2);border-radius:12px;padding:20px;margin-bottom:16px;max-width:680px}
+  .card h2{font-size:13px;color:#e8c96a;margin:0 0 12px;text-transform:uppercase;letter-spacing:.08em}
+  .row{display:flex;gap:10px;align-items:center;margin-bottom:10px}
+  input{background:rgba(255,255,255,.06);border:1px solid rgba(184,144,42,.3);border-radius:8px;padding:9px 12px;color:#fff;font-size:14px;font-family:inherit;outline:none;width:180px}
+  input:focus{border-color:#e8c96a}
+  button{background:linear-gradient(135deg,#e8c96a,#b8902a);color:#0a1728;border:none;border-radius:8px;padding:9px 18px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit}
+  button.danger{background:linear-gradient(135deg,#dc2626,#991b1b);color:#fff}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  .log{background:rgba(0,0,0,.4);border-radius:8px;padding:14px;font-size:12px;font-family:monospace;line-height:1.7;min-height:120px;max-height:400px;overflow-y:auto;white-space:pre-wrap;word-break:break-all}
+  .ok{color:#4ade80}.err{color:#f87171}.warn{color:#fbbf24}.info{color:#60a5fa}
+  .badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;margin-left:6px}
+  .found{background:rgba(220,38,38,.2);color:#f87171}
+  .not-found{background:rgba(22,163,74,.2);color:#4ade80}
+</style>
+</head>
+<body>
+
+<h1>🔧 OPUS — Limpar Pedido do Firebase</h1>
+<p class="sub">Remove um pedido específico de despachos (roteirização, separação, carregamento, faturamento) e da carteira.</p>
+
+<div class="card">
+  <h2>Pedido a limpar</h2>
+  <div class="row">
+    <input type="text" id="inp-pedido" placeholder="Nº pedido (ex: 11805)" value="11805">
+    <button onclick="buscarPedido()">🔍 Buscar</button>
+    <button class="danger" id="btn-limpar" onclick="limparPedido()" disabled>🗑 Remover de tudo</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Log de operações</h2>
+  <div class="log" id="log">Aguardando...</div>
+</div>
+
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import { getDatabase, ref, get, set, remove, update } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
+
+const FB = {
+  apiKey: "AIzaSyAch7_Sn4jq1cuTGV1ijGsDGUXC9dyilOs",
+  authDomain: "mfparis-bd054.firebaseapp.com",
+  databaseURL: "https://mfparis-bd054-default-rtdb.firebaseio.com",
+  projectId: "mfparis-bd054",
+};
+const app = initializeApp(FB);
+const db  = getDatabase(app);
+
+const logEl = document.getElementById('log');
+const btnLimpar = document.getElementById('btn-limpar');
+
+let achados = []; // lista de { tipo, path, descricao, acao }
+
+function log(msg, cls='') {
+  logEl.textContent += (logEl.textContent === 'Aguardando...' ? '' : '\n') + msg;
+  if (cls) {
+    const span = document.createElement('span');
+    span.className = cls;
+    span.textContent = msg;
+    logEl.innerHTML = logEl.innerHTML.replace(/Aguardando\.\.\./, '') + '\n';
+    logEl.appendChild(span);
+  }
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function clearLog() { logEl.textContent = ''; }
+
+window.buscarPedido = async function() {
+  clearLog();
+  achados = [];
+  btnLimpar.disabled = true;
+  const numPed = document.getElementById('inp-pedido').value.trim();
+  if (!numPed) { logEl.textContent = '⚠ Informe o número do pedido.'; return; }
+
+  logEl.textContent = `🔍 Buscando pedido #${numPed} em todo o Firebase...\n`;
+
+  // 1. Verifica despachos
+  const snapDt = await get(ref(db, 'despachos'));
+  const dts = snapDt.val() || {};
+  let encontrouDespacho = false;
+  for (const [token, dt] of Object.entries(dts)) {
+    const paradas = dt.paradas || [];
+    const idxs = paradas.reduce((acc, p, i) => {
+      const num = String(p.pedido || p.numero_pedido || '');
+      const cod = String(p._codigo_pedido || p.codigo_pedido || '');
+      if (num === numPed || cod === numPed) acc.push(i);
+      return acc;
+    }, []);
+    if (idxs.length) {
+      encontrouDespacho = true;
+      idxs.forEach(i => {
+        const p = paradas[i];
+        const emp = p._empresa || p.empresa || '?';
+        const cli = p.cliente || p.cliente_nome || '?';
+        logEl.textContent += `  ✓ DESPACHO [${token}] rota "${dt.nomeRota||'?'}" status:${dt.statusFluxo||'?'} — parada[${i}] #${numPed} ${emp} / ${cli}\n`;
+        achados.push({ tipo: 'despacho_parada', token, idx: i, paradas, nomeRota: dt.nomeRota });
+      });
+    }
+  }
+  if (!encontrouDespacho) logEl.textContent += '  ✗ Não encontrado em despachos\n';
+
+  // 2. Verifica carteira_envio/pedidos
+  const snapCart = await get(ref(db, 'carteira_envio/pedidos'));
+  const carteira = snapCart.val();
+  const listaCart = Array.isArray(carteira) ? carteira : (carteira ? Object.values(carteira) : []);
+  const idxsCart = listaCart.reduce((acc, p, i) => {
+    const num = String(p.numero_pedido || p.pedido || '');
+    const cod = String(p.codigo_pedido || '');
+    if (num === numPed || cod === numPed) acc.push(i);
+    return acc;
+  }, []);
+  if (idxsCart.length) {
+    logEl.textContent += `  ✓ CARTEIRA — ${idxsCart.length} entrada(s) do pedido #${numPed}\n`;
+    achados.push({ tipo: 'carteira', idxs: idxsCart, lista: listaCart });
+  } else {
+    logEl.textContent += '  ✗ Não encontrado na carteira\n';
+  }
+
+  if (achados.length === 0) {
+    logEl.textContent += '\n✅ Pedido não encontrado em nenhuma estrutura. Já está limpo.\n';
+  } else {
+    logEl.textContent += `\n⚠ Encontrado em ${achados.length} local(ais). Clique em "Remover de tudo" para limpar.\n`;
+    btnLimpar.disabled = false;
+  }
+};
+
+window.limparPedido = async function() {
+  if (!achados.length) return;
+  btnLimpar.disabled = true;
+  const numPed = document.getElementById('inp-pedido').value.trim();
+  logEl.textContent += `\n🗑 Iniciando remoção do pedido #${numPed}...\n`;
+
+  for (const item of achados) {
+    if (item.tipo === 'despacho_parada') {
+      // Remove a parada do array e reescreve
+      const novasParadas = item.paradas.filter((_, i) => i !== item.idx);
+      try {
+        if (novasParadas.length === 0) {
+          // Se era o único pedido da rota, remove o despacho inteiro
+          await remove(ref(db, `despachos/${item.token}`));
+          logEl.textContent += `  ✅ Despacho [${item.token}] "${item.nomeRota}" removido (era o único pedido)\n`;
+        } else {
+          await set(ref(db, `despachos/${item.token}/paradas`), novasParadas);
+          logEl.textContent += `  ✅ Parada #${numPed} removida do despacho "${item.nomeRota}" (${novasParadas.length} pedido(s) restante(s))\n`;
+        }
+      } catch(e) {
+        logEl.textContent += `  ❌ Erro no despacho [${item.token}]: ${e.message}\n`;
+      }
+    }
+
+    if (item.tipo === 'carteira') {
+      try {
+        const nova = item.lista.filter((_, i) => !item.idxs.includes(i));
+        await set(ref(db, 'carteira_envio/pedidos'), nova.length ? nova : null);
+        logEl.textContent += `  ✅ Removido da carteira (${item.idxs.length} entrada(s) excluída(s))\n`;
+      } catch(e) {
+        logEl.textContent += `  ❌ Erro na carteira: ${e.message}\n`;
+      }
+    }
+  }
+
+  achados = [];
+  logEl.textContent += `\n🎉 Pedido #${numPed} removido de todas as estruturas. Pode começar do zero.\n`;
+};
+</script>
+</body>
+</html>
