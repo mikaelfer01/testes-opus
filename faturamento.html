@@ -604,8 +604,12 @@ function renderDetalhe(token) {
     // Status NF-e
     if (nfInfo) {
       const lotesNf = (nfInfo.rastreabilidade||[]).filter(r=>r.lote||r.val).map(r=>`${r.sku||'—'}: lote ${r.lote||'—'}${r.val?' · val '+r.val:''}`).join('<br>');
+      const nfKey = p._codigo_pedido || p.codigo_pedido;
       html += `<div class="nf-box">
-        <div class="nf-titulo ok">✅ NF-e Emitida</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+          <div class="nf-titulo ok">✅ NF-e Emitida</div>
+          <button onclick="deletarNF('${nfKey}',${i})" style="background:rgba(220,38,38,.12);border:1px solid rgba(220,38,38,.3);color:#991b1b;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;flex-shrink:0">🗑 Deletar NF</button>
+        </div>
         <div class="nf-detalhe">NF Nº <strong>${nfInfo.numero_nf||'—'}</strong> · Série ${nfInfo.serie||'—'} · Chave: <span style="font-family:monospace;font-size:10px">${nfInfo.chave_nf||'—'}</span></div>
         ${lotesNf ? `<div class="nf-detalhe" style="margin-top:4px;font-size:10.5px">${lotesNf}</div>` : ''}
       </div>`;
@@ -683,6 +687,35 @@ window.devolverPedidoCarteira = async function(i) {
     }
   } catch(e) {
     toast('❌ Erro ao devolver: ' + e.message, 'err');
+  } finally {
+    esconderLoading();
+  }
+};
+
+// ── DELETAR NF DO FIREBASE (volta pedido para aguardando faturamento) ─────────
+window.deletarNF = async function(nfKey, pedIdx) {
+  const p = pedidosDetalhe[pedIdx];
+  const numPed = p?.pedido || p?.numero_pedido || nfKey;
+  if (!confirm(`Deletar o registro da NF-e do pedido #${numPed}?\n\nO pedido voltará para "Aguardando Faturamento". A nota no Omie não será cancelada — somente o registro aqui no OPUS é removido.`)) return;
+
+  loading('Deletando NF do pedido #' + numPed + '...');
+  try {
+    const dt = DTS[dtAtual] || {};
+    const fat = dt.faturamento || {};
+    const nfsAtuais = { ...(fat.nfs || {}) };
+    delete nfsAtuais[nfKey];
+
+    const temOutrasNFs = Object.keys(nfsAtuais).length > 0;
+
+    await fbUpd('despachos/' + dtAtual + '/faturamento', {
+      [`nfs/${nfKey}`]: null,
+      status: temOutrasNFs ? fat.status : null,
+      finalizado_em: temOutrasNFs ? (fat.finalizado_em || null) : null,
+    });
+
+    toast('✅ NF deletada. Pedido #' + numPed + ' voltou para aguardando.', 'ok');
+  } catch(e) {
+    toast('❌ Erro ao deletar NF: ' + e.message, 'err');
   } finally {
     esconderLoading();
   }
