@@ -512,8 +512,10 @@ onValue(ref(_db, 'despachos'), snap => {
   DTS = snap.val() || {};
   hide('loading');
   badges();
-  // Atualiza tela ativa sem resetar navegação
-  if (dtSep) renderDetSep();
+  // Atualiza tela ativa sem resetar navegação.
+  // Pula re-render enquanto usuário está digitando em campo de rastreabilidade.
+  const focusadoRastro = document.activeElement?.classList.contains('rastro-inp');
+  if (dtSep) { if (!focusadoRastro) renderDetSep(); }
   else if (dtCar) renderDetCar();
   else mostrarLista(aba);
 }, err => {
@@ -737,9 +739,15 @@ function pedCardSep(p, i, acao, fotosArr, finalizado) {
 
 window.togglePed = i => document.getElementById('ped-' + i)?.classList.toggle('open');
 
-// Salva rastreabilidade (lote/fab/val) por item do pedido
+// Salva rastreabilidade (lote/fab/val) por item — debounce de 800ms para não
+// disparar o onValue a cada tecla e causar re-render enquanto o usuário digita.
+const _rastroTimers = {};
 window.salvarRastro = function(pedIdx, itemIdx, campo, valor) {
-  fbSet(`despachos/${dtSep}/separacao/rastros/${pedIdx}/${itemIdx}/${campo}`, valor || null);
+  const key = `${pedIdx}_${itemIdx}_${campo}`;
+  clearTimeout(_rastroTimers[key]);
+  _rastroTimers[key] = setTimeout(() => {
+    fbSet(`despachos/${dtSep}/separacao/rastros/${pedIdx}/${itemIdx}/${campo}`, valor || null);
+  }, 800);
 };
 
 // Abre romaneio de carregamento com rastreabilidade completa
