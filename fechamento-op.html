@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fechamento de OP — MF Paris OPUS</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Manrope:wght@500;600;700;800&family=Playfair+Display:ital,wght@0,700;1,700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --navy:#0d1f3c;--navy2:#1a3a6b;--gold:#b8902a;--gold2:#d4a83a;--gold3:#e8c96a;
+  --cream:#faf8f4;--ink:#0d1f3c;--ink3:#4a6080;--ink4:#7a8fa8;--border:#d4c4a0;
+  --green:#15803d;--green-l:#dcfce7;--red:#dc2626;--red-l:#fee2e2;
+  --amber:#b45309;--amber-l:#fef3c7;--blue:#1e40af;--blue-l:#dbeafe;
+  --purple:#7c3aed;--purple-l:#ede9fe;
+  --glass:rgba(255,255,255,0.85);--blur:saturate(180%) blur(20px);
+  --shadow:0 1px 3px rgba(0,0,0,.06),0 4px 16px -4px rgba(13,31,60,.1);
+  --shadow-l:0 8px 32px -8px rgba(13,31,60,.2);
+  --r:10px;--rl:16px;--rxl:22px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--cream);color:var(--ink);min-height:100vh;-webkit-font-smoothing:antialiased;}
+body::before{content:'';position:fixed;inset:0;z-index:-1;background:radial-gradient(ellipse 70% 50% at 100% 0%,rgba(184,144,42,.07),transparent 60%),var(--cream);}
+
+/* NAV */
+.tabs-bar{position:sticky;top:0;z-index:150;display:flex;align-items:center;background:#0d1f3c;padding:0 20px;height:54px;border-bottom:2px solid #b8902a;box-shadow:0 2px 16px rgba(13,31,60,.35);}
+.tabs-brand{font-family:'Playfair Display',serif;font-style:italic;font-size:15px;font-weight:700;color:#e8c96a;margin-right:28px;white-space:nowrap;}
+.tabs-brand small{font-family:'Inter',sans-serif;font-style:normal;font-size:9px;font-weight:800;letter-spacing:.22em;text-transform:uppercase;color:#fff;margin-left:7px;vertical-align:middle;}
+.tab-link{height:54px;padding:0 14px;display:flex;align-items:center;gap:6px;font-size:12px;font-weight:800;color:rgba(255,255,255,.8);text-decoration:none;border-bottom:3px solid transparent;background:transparent;border-top:none;border-left:none;border-right:none;font-family:inherit;cursor:pointer;letter-spacing:.05em;text-transform:uppercase;transition:all .18s;white-space:nowrap;}
+.tab-link:hover{color:#fff;background:rgba(255,255,255,.07);}
+.tab-link.active{color:#e8c96a;border-bottom-color:#b8902a;background:rgba(184,144,42,.1);}
+.tab-link svg{width:13px;height:13px;opacity:.75;flex-shrink:0;}
+
+/* LAYOUT */
+main{max-width:1400px;margin:0 auto;padding:24px 20px 60px;}
+.page-header{margin-bottom:24px;display:flex;align-items:flex-end;justify-content:space-between;padding-bottom:16px;border-bottom:1px solid var(--border);}
+.page-eyebrow{font-size:10px;letter-spacing:.3em;text-transform:uppercase;color:var(--gold);font-weight:600;margin-bottom:6px;}
+.page-title{font-family:'Playfair Display',serif;font-size:2rem;font-weight:700;color:var(--navy);line-height:1.1;}
+.page-title em{font-style:italic;color:var(--gold);}
+
+/* CARDS */
+.card{background:var(--glass);backdrop-filter:var(--blur);border:1px solid var(--border);border-radius:var(--rl);padding:20px 22px;margin-bottom:16px;box-shadow:var(--shadow);}
+.card-title{font-size:10px;font-weight:700;color:var(--ink4);text-transform:uppercase;letter-spacing:1px;margin-bottom:16px;display:flex;align-items:center;gap:8px;}
+.card-title .num{width:22px;height:22px;border-radius:6px;background:var(--blue-l);color:var(--blue);font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;}
+
+/* ETAPA BADGE */
+.etapa-badge{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.3px;}
+.etapa-producao{background:rgba(30,64,175,.12);color:#1e40af;border:1px solid rgba(30,64,175,.2);}
+.etapa-qualidade{background:rgba(124,58,237,.12);color:#7c3aed;border:1px solid rgba(124,58,237,.2);}
+.etapa-conferido{background:rgba(245,158,11,.14);color:#b45309;border:1px solid rgba(245,158,11,.25);}
+.etapa-concluido{background:rgba(22,163,74,.14);color:#15803d;border:1px solid rgba(22,163,74,.2);}
+.etapa-armazenado{background:rgba(15,23,42,.08);color:#334155;border:1px solid rgba(15,23,42,.15);}
+.etapa-planejada{background:rgba(148,163,184,.15);color:#475569;border:1px solid rgba(148,163,184,.3);}
+
+/* OP LIST */
+.op-list{display:flex;flex-direction:column;gap:10px;}
+.op-group{margin-bottom:8px;}
+.op-group-label{font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--ink4);margin-bottom:6px;padding-left:4px;}
+.op-card{background:white;border:1.5px solid var(--border);border-radius:var(--r);padding:14px 16px;cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:12px;}
+.op-card:hover{border-color:var(--gold);transform:translateY(-1px);box-shadow:var(--shadow-l);}
+.op-card.selected{border-color:var(--blue);background:var(--blue-l);box-shadow:0 0 0 3px rgba(30,64,175,.15);}
+.op-num{font-family:'Manrope',sans-serif;font-size:18px;font-weight:800;color:var(--navy);min-width:70px;}
+.op-info{flex:1;}
+.op-prod{font-size:12px;font-weight:600;color:var(--ink);line-height:1.3;margin-bottom:3px;}
+.op-det{font-size:11px;color:var(--ink4);}
+.op-linha-badge{font-size:9px;font-weight:700;padding:2px 8px;border-radius:5px;flex-shrink:0;}
+.lacteo{background:var(--blue-l);color:var(--blue);}
+.cafe{background:rgba(154,107,26,.15);color:#6b3a00;}
+.sacaria{background:rgba(109,40,217,.1);color:#5b21b6;}
+
+/* FORM */
+.form-grid{display:grid;gap:12px;}
+.g2{grid-template-columns:1fr 1fr;}
+.g3{grid-template-columns:1fr 1fr 1fr;}
+.g4{grid-template-columns:1fr 1fr 1fr 1fr;}
+@media(max-width:700px){.g2,.g3,.g4{grid-template-columns:1fr;}}
+.fl{display:flex;flex-direction:column;gap:4px;}
+.fl label{font-size:10px;font-weight:600;color:var(--ink4);text-transform:uppercase;letter-spacing:.5px;}
+.fl input,.fl select,.fl textarea{font-size:13px;padding:9px 12px;border-radius:var(--r);border:1.5px solid var(--border);background:white;color:var(--ink);font-family:inherit;outline:none;transition:all .18s;}
+.fl input:focus,.fl select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(30,64,175,.1);}
+.fl input[readonly]{background:#f8f8f8;color:var(--ink3);}
+.meta-badge{background:var(--amber-l);border:1px solid rgba(180,83,9,.25);color:var(--amber);padding:8px 12px;border-radius:var(--r);font-size:12px;font-weight:600;text-align:center;}
+
+/* TABELA HORA */
+.table-wrap{overflow-x:auto;border-radius:var(--r);border:1px solid var(--border);}
+table.thora{width:100%;border-collapse:collapse;min-width:800px;font-size:12px;}
+table.thora thead th{background:var(--navy);color:rgba(255,255,255,.7);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;padding:10px 8px;border-right:1px solid rgba(255,255,255,.06);white-space:nowrap;}
+table.thora tbody tr{border-bottom:1px solid #eee;}
+table.thora tbody tr:last-child{border-bottom:none;}
+table.thora tbody tr:hover{background:#fafafa;}
+table.thora tbody tr.parada{background:#fff8f8;}
+table.thora td{padding:5px 6px;border-right:1px solid #f0f0f0;vertical-align:middle;}
+table.thora td:first-child{font-weight:700;font-size:11px;color:var(--ink3);background:#fafaf8;padding-left:12px;white-space:nowrap;min-width:90px;}
+table.thora td input,table.thora td select{width:100%;font-size:11px;padding:6px 7px;border-radius:6px;border:1px solid transparent;background:transparent;color:var(--ink);font-family:inherit;transition:all .15s;}
+table.thora td input:hover,table.thora td select:hover{border-color:var(--border);background:#fff;}
+table.thora td input:focus,table.thora td select:focus{outline:none;border-color:var(--blue);background:#fff;}
+table.thora td.dur{font-weight:700;color:var(--red);text-align:center;background:#fff8f8;font-size:12px;}
+table.thora td.dur.zero{color:var(--ink4);background:transparent;font-weight:400;}
+
+/* TOTAIS */
+.totais-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;}
+@media(max-width:700px){.totais-grid{grid-template-columns:1fr 1fr;}}
+.tot{background:#f8f8f8;border-radius:var(--r);padding:14px;text-align:center;border:1px solid var(--border);}
+.tot .tl{font-size:10px;font-weight:700;color:var(--ink4);text-transform:uppercase;letter-spacing:.3px;margin-bottom:4px;}
+.tot .tv{font-size:22px;font-weight:800;color:var(--ink);}
+.tot.ok .tv{color:var(--green);}
+.tot.warn .tv{color:var(--amber);}
+.tot.crit .tv{color:var(--red);}
+
+/* BOTÕES */
+.btn{padding:10px 20px;font-size:13px;font-weight:700;font-family:inherit;border-radius:var(--r);cursor:pointer;border:1.5px solid var(--border);background:white;color:var(--ink);transition:all .2s;display:inline-flex;align-items:center;gap:7px;}
+.btn:hover{background:#f5f5f5;border-color:#aaa;}
+.btn-primary{background:var(--navy);color:white;border-color:var(--navy);}
+.btn-primary:hover{background:#0a1728;}
+.btn-primary:disabled{opacity:.45;cursor:not-allowed;}
+.btn-green{background:var(--green);color:white;border-color:var(--green);}
+.btn-green:hover{background:#0f6030;}
+.btn-qualidade{background:var(--purple);color:white;border-color:var(--purple);}
+.btn-qualidade:hover{background:#6d28d9;}
+.btn-conferido{background:var(--amber);color:white;border-color:var(--amber);}
+.btn-conferido:hover{background:#92400e;}
+.btn-concluido{background:var(--green);color:white;border-color:var(--green);}
+.btn-concluido:hover{background:#0f6030;}
+.btn-armazenado{background:#334155;color:white;border-color:#334155;}
+.btn-armazenado:hover{background:#1e293b;}
+.btn-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:16px;}
+.spinner{width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* MODAL */
+.modal{position:fixed;inset:0;background:rgba(13,31,60,.65);backdrop-filter:blur(6px);z-index:999;display:none;align-items:center;justify-content:center;}
+.modal.on{display:flex;}
+.modal-box{background:white;border-radius:var(--rxl);padding:28px;width:400px;max-width:92vw;box-shadow:0 32px 80px -16px rgba(13,31,60,.4);border:1px solid rgba(232,201,106,.3);}
+.modal-title{font-family:'Playfair Display',serif;font-size:18px;font-weight:700;color:var(--navy);margin-bottom:6px;}
+.modal-sub{font-size:12px;color:var(--ink4);margin-bottom:18px;line-height:1.6;}
+.modal-box input[type=password]{width:100%;padding:11px 14px;border:1.5px solid var(--border);border-radius:var(--r);font-size:14px;font-family:inherit;outline:none;margin-bottom:8px;}
+.modal-box input[type=password]:focus{border-color:var(--gold);}
+.modal-err{font-size:11px;color:var(--red);min-height:16px;margin-bottom:10px;}
+.modal-acts{display:flex;gap:10px;}
+.modal-acts button{flex:1;padding:10px;border-radius:var(--r);font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;border:none;transition:all .2s;}
+.modal-acts .mc{background:#f1f5f9;color:var(--ink3);}
+.modal-acts .mp{background:linear-gradient(135deg,var(--gold3),var(--gold));color:var(--navy);}
+
+/* ETAPAS PIPELINE */
+.pipeline{display:flex;align-items:center;gap:0;margin-bottom:20px;overflow-x:auto;padding:4px 0;}
+.pip-step{display:flex;align-items:center;gap:6px;padding:8px 14px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap;border:1.5px solid transparent;}
+.pip-step.done{background:var(--green-l);color:var(--green);border-color:rgba(22,163,74,.3);}
+.pip-step.active{background:var(--blue-l);color:var(--blue);border-color:rgba(30,64,175,.4);box-shadow:0 0 0 3px rgba(30,64,175,.12);}
+.pip-step.pending{background:#f1f5f9;color:#94a3b8;border-color:#e2e8f0;}
+.pip-arrow{color:#cbd5e1;font-size:14px;margin:0 2px;flex-shrink:0;}
+
+/* TOAST */
+#toast{position:fixed;bottom:20px;right:20px;z-index:9999;display:flex;flex-direction:column;gap:8px;}
+.toast-item{padding:10px 18px;border-radius:10px;font-size:13px;font-weight:600;color:white;animation:fadeUp .3s ease;box-shadow:0 4px 16px rgba(0,0,0,.2);}
+.toast-ok{background:var(--green);}
+.toast-err{background:var(--red);}
+.toast-info{background:var(--navy);}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+/* OP vazia */
+.empty-state{text-align:center;padding:48px 20px;color:var(--ink4);}
+.empty-icon{font-size:40px;margin-bottom:10px;}
+
+/* LOADING OVERLAY */
+#loading{position:fixed;inset:0;background:rgba(13,31,60,.6);backdrop-filter:blur(4px);z-index:9998;display:none;align-items:center;justify-content:center;}
+#loading.on{display:flex;}
+.spin-big{width:44px;height:44px;border:4px solid rgba(255,255,255,.2);border-top-color:var(--gold3);border-radius:50%;animation:spin .8s linear infinite;}
+
+.sep{height:1px;background:var(--border);margin:16px 0;}
+.tag{display:inline-block;font-size:10px;font-weight:700;padding:2px 8px;border-radius:5px;}
+.tab-link{font-size:10px;padding:0 8px;gap:4px;}
+.tab-link svg{width:11px;height:11px;}
+.tabs-brand{font-size:12px;margin-right:12px;} 
+</style>
+</head>
+<body>
+
+<div id="loading"><div class="spin-big"></div></div>
+<div id="toast"></div>
+
+<!-- MODAL SENHA -->
+<div class="modal" id="modal-senha">
+  <div class="modal-box">
+    <div class="modal-title" id="modal-titulo">Autenticação</div>
+    <div class="modal-sub" id="modal-sub">Digite sua senha para continuar.</div>
+    <input type="password" id="modal-input" placeholder="Senha" autocomplete="off">
+    <div class="modal-err" id="modal-err"></div>
+    <div class="modal-acts">
+      <button class="mc" onclick="fecharModal()">Cancelar</button>
+      <button class="mp" onclick="confirmarModal()">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<!-- NAV -->
+<nav class="tabs-bar">
+  <span class="tabs-brand">Grupo MF Paris<small>OPUS</small></span>
+  <a href="index.html" class="tab-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>Início</a>
+  <a href="calendario.html" class="tab-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><rect x="7" y="13" width="3" height="3" rx="0.5"/><rect x="14" y="13" width="3" height="3" rx="0.5"/></svg>Calendário</a>
+  <a href="apontamento.html" class="tab-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>Produtividade</a>
+  <a href="simulador.html" class="tab-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 3h15v13H1zM16 8h4l3 3v5h-7z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>Simulador de Frete</a>
+  <a href="farol.html" class="tab-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="4"/><path d="M9 4h6l1 4H8L9 4z"/><path d="M8 8l-1 8h10l-1-8"/><line x1="7" y1="16" x2="5" y2="20"/><line x1="17" y1="16" x2="19" y2="20"/><line x1="5" y1="20" x2="19" y2="20"/><line x1="10" y1="20" x2="10" y2="22"/><line x1="14" y1="20" x2="14" y2="22"/><line x1="2" y1="10" x2="5" y2="11"/><line x1="22" y1="10" x2="19" y2="11"/></svg>Farol de Entregas</a>
+  <a href="estoque.html" class="tab-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="2" y1="17" x2="18" y2="17"/><path d="M4 17V7h8v10"/><path d="M12 10h4l2 4v3h-6V10z"/><circle cx="6" cy="19.5" r="1.5"/><circle cx="15" cy="19.5" r="1.5"/><line x1="4" y1="10" x2="2" y2="10"/><line x1="4" y1="13" x2="2" y2="13"/></svg>Estoque</a>
+  <a href="programacao.html" class="tab-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Programação da Produção</a>
+  <a href="simulador-producao.html" class="tab-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>Simulador de Programação</a>
+  <button type="button" class="tab-link active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><rect x="7" y="13" width="3" height="3" rx="0.5"/><rect x="14" y="13" width="3" height="3" rx="0.5"/></svg>Fechamento de OP</button>  
+  <a href="carteira.html" class="tab-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7H4a2 2 0 00-2 2v9a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2z"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/><line x1="8" y1="12" x2="16" y2="12"/></svg>Carteira</a>
+  <a href="roteirizador.html" class="tab-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>Roteirização</a>
+</nav>
+
+<main>
+  <div class="page-header">
+    <div>
+      <div class="page-eyebrow">Ordens de Produção</div>
+      <div class="page-title">Fechamento de <em>OP</em></div>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;">
+      <div id="user-badge" style="font-size:12px;color:var(--ink3);background:white;padding:6px 14px;border-radius:999px;border:1px solid var(--border);">👁 Visualização</div>
+      <button class="btn btn-primary" onclick="abrirListaOPs()" id="btn-carregar">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.51"/></svg>
+        Carregar OPs do OMIE
+      </button>
+    </div>
+  </div>
+
+  <!-- SELEÇÃO DE OP -->
+  <div class="card" id="card-selecao">
+    <div class="card-title"><div class="num">1</div>Selecionar Ordem de Produção</div>
+    <div id="op-lista-container">
+      <div class="empty-state">
+        <div class="empty-icon">📋</div>
+        <div style="font-size:14px;font-weight:600;margin-bottom:6px;">Nenhuma OP carregada</div>
+        <div style="font-size:12px;">Clique em "Carregar OPs do OMIE" para buscar as ordens em aberto.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- APONTAMENTO (aparece após selecionar OP) -->
+  <div id="card-apontamento" style="display:none;">
+
+    <!-- PIPELINE -->
+    <div class="card" style="padding:14px 22px;">
+      <div style="font-size:10px;font-weight:700;color:var(--ink4);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">Status da OP</div>
+      <div class="pipeline" id="pipeline"></div>
+    </div>
+
+    <!-- IDENTIFICAÇÃO -->
+    <div class="card">
+      <div class="card-title"><div class="num">2</div>Identificação</div>
+      <div class="form-grid g4">
+        <div class="fl"><label>Nº da OP</label><input type="text" id="ap-op" readonly></div>
+        <div class="fl"><label>Data</label><input type="date" id="ap-data"></div>
+        <div class="fl"><label>Turno</label>
+          <select id="ap-turno"><option>Turno A (06h–14h)</option><option>Turno B (14h–22h)</option><option>Turno C (22h–06h)</option></select>
+        </div>
+        <div class="fl"><label>Operador</label><input type="text" id="ap-op-nome" placeholder="Nome do operador"></div>
+      </div>
+      <div class="sep"></div>
+      <div class="form-grid g4">
+        <div class="fl"><label>SKU</label><input type="text" id="ap-sku" readonly></div>
+        <div class="fl" style="grid-column:span 2"><label>Produto</label><input type="text" id="ap-produto" readonly></div>
+        <div class="fl"><label>Linha</label><input type="text" id="ap-linha" readonly></div>
+      </div>
+      <div class="form-grid g3" style="margin-top:12px;">
+        <div class="fl"><label>Máquina</label><input type="text" id="ap-maquina" readonly></div>
+        <div class="fl"><label>Qtd planejada (kg)</label><input type="text" id="ap-qtd-plan" readonly></div>
+        <div>
+          <div class="meta-badge" id="ap-meta-hora">— Calculando meta/hora...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- HORA A HORA -->
+    <div class="card">
+      <div class="card-title"><div class="num">3</div>Produção hora a hora
+        <span style="margin-left:auto;font-size:10px;font-weight:400;color:var(--ink4);">Linhas em vermelho = parada registrada</span>
+      </div>
+      <div class="table-wrap">
+        <table class="thora">
+          <thead><tr>
+            <th>Hora</th><th>Meta/h (kg)</th><th>Realizado (kg)</th>
+            <th>P. Início</th><th>P. Fim</th><th>Min.</th>
+            <th>Causa</th><th>Equipamento</th><th>Retrab./Desc.</th><th>Observações</th>
+          </tr></thead>
+          <tbody id="corpo-hora"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- TOTAIS -->
+    <div class="card">
+      <div class="card-title"><div class="num">4</div>Totais do turno</div>
+      <div class="totais-grid">
+        <div class="tot"><div class="tl">Planejado (kg)</div><div class="tv" id="tot-plan">0</div></div>
+        <div class="tot"><div class="tl">Produzido (kg)</div><div class="tv" id="tot-prod">0</div></div>
+        <div class="tot"><div class="tl">Parado (min)</div><div class="tv" id="tot-min">0</div></div>
+        <div class="tot"><div class="tl">Nº Paradas</div><div class="tv" id="tot-np">0</div></div>
+        <div class="tot"><div class="tl">Disponibilidade</div><div class="tv" id="tot-disp">—</div></div>
+      </div>
+    </div>
+
+    <!-- AÇÕES -->
+    <div class="card" id="card-acoes">
+      <div class="card-title"><div class="num">5</div>Ações</div>
+      <div id="acoes-container"></div>
+    </div>
+
+  </div><!-- /card-apontamento -->
+</main>
+
+<script>
+'use strict';
+
+// ═══════════════════════════════════════════════
+// CONFIGURAÇÃO
+// ═══════════════════════════════════════════════
+var OMIE_KEY    = '952260381072';
+var OMIE_SECRET = '8300b385eeec583c71439709ab866fc7';
+var OMIE_KEY_DMS    = '1340821992510';
+var OMIE_SECRET_DMS = 'dac287f9b3ec422dc93da6cdbcc3e0b2';
+var USE_PROXY   = !(window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname === '');
+
+// Usuários autorizados a preencher apontamento de produção
+var USUARIOS_PRODUCAO = [
+  { nome:'Vagner',  senha:'mfparis@2026' },
+  { nome:'Junior',  senha:'mfparis@2026' },
+  { nome:'Daniel',  senha:'Cafe@2026' }
+];
+
+// Senhas para cada etapa de movimentação
+var SENHAS_ETAPA = {
+  qualidade:  ['mfparis@2026','Cafe@2026'],
+  conferido:  ['mfparis@2026','Cafe@2026'],
+  concluido:  ['mfparis@2026','Cafe@2026'],
+  armazenado: ['mfparis@2026','Cafe@2026']
+};
+
+// Etapas OMIE (ajuste conforme necessário após verificar via API)
+var ETAPAS_OMIE = {
+  producao:   '30',
+  qualidade:  '40',
+  conferido:  '50',
+  concluido:  '60',
+  armazenado: '70'
+};
+
+var ETAPAS_LABEL = {
+  '10':'A Produzir','20':'Liberada','30':'Produzindo',
+  '40':'Qualidade','50':'Conferido','60':'Concluído',
+  '70':'Armazenado','80':'Concluída'
+};
+
+// Velocidades (kg/min) — mesmas premissas do simulador
+var VEL_IND  = {'200g':8,'400g':8,'800g':10,'1kg':12};
+var VEL_MAZ  = {'200g':3.6,'400g':3.6,'800g':5.6,'1kg':8};
+var VEL_SAC  = {'25kg':11};
+var VEL_CAFE = {'200g':8,'400g':16,'800g':9.6,'1kg':12,'500g':9.6};
+var OEE      = 0.7;
+var N_HORAS  = 10;
+var CAUSAS   = {MC:'Manut. Corretiva',MP:'Manut. Preventiva',SE:'Setup/Changeover',FI:'Falta de Insumo',QR:'Qualidade/Retrabalho',AO:'Ag. Operador',PP:'Parada Programada',UT:'Utilidades',OT:'Outro'};
+
+var OPS_CARREGADAS = [];
+var OP_SELECIONADA = null;
+var USUARIO_ATUAL  = null;
+var _modalCallback = null;
+
+// ═══════════════════════════════════════════════
+// OMIE API
+// ═══════════════════════════════════════════════
+async function omieCall(call, param, ep, _retry) {
+  ep = ep || 'https://app.omie.com.br/api/v1/produtos/op/';
+  var payload = { call:call, app_key:String(OMIE_KEY), app_secret:String(OMIE_SECRET), param:param };
+  var resp;
+  if (USE_PROXY) {
+    resp = await fetch('/api/omie',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({endpoint:ep,payload:payload})});
+  } else {
+    resp = await fetch(ep,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  }
+  if (!resp.ok) throw new Error('HTTP '+resp.status);
+  var data = await resp.json();
+  if (data.faultstring) {
+    if (data.faultstring.indexOf('REDUNDANT')>=0 && !_retry) {
+      var seg=35, m=data.faultstring.match(/Aguarde (\d+) segundo/);
+      if(m) seg=parseInt(m[1])+3;
+      await new Promise(function(r){setTimeout(r,seg*1000);});
+      return omieCall(call,param,ep,true);
+    }
+    throw new Error(data.faultstring);
+  }
+  return data;
+}
+async function omieCallDMS(call, param, ep, _retry) {
+  ep = ep || 'https://app.omie.com.br/api/v1/produtos/op/';
+  var payload = { call:call, app_key:String(OMIE_KEY_DMS), app_secret:String(OMIE_SECRET_DMS), param:param };
+  var resp;
+  if (USE_PROXY) {
+    resp = await fetch('/api/omie',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({endpoint:ep,payload:payload})});
+  } else {
+    resp = await fetch(ep,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  }
+  if (!resp.ok) throw new Error('HTTP '+resp.status);
+  var data = await resp.json();
+  if (data.faultstring) throw new Error(data.faultstring);
+  return data;
+}
+// ═══════════════════════════════════════════════
+// CARREGAR OPs
+// ═══════════════════════════════════════════════
+async function abrirListaOPs() {
+  showLoading(true);
+  var ops = [];
+  try {
+   try {
+      var pag1=1;
+      while(true) {
+        var d1 = await omieCall('ListarOrdemProducao',[{
+          pagina:pag1, registros_por_pagina:50,
+          apenas_importado_api:'N',
+          ordenar_por:'DATA_PREVISAO', ordem_decrescente:'S'
+        }],'https://app.omie.com.br/api/v1/produtos/op/');
+        var lista1 = d1.cadastros||[];
+        if (!lista1.length) break;
+        lista1.forEach(function(op){ op._empresa='CAFE'; ops.push(op); });
+        var total1 = d1.total_de_registros||lista1.length;
+        if (pag1*50>=total1||lista1.length<50) break;
+        // Para em OPs com mais de 90 dias
+        var ultDt1 = new Date(((lista1[lista1.length-1].identificacao||{}).dDtPrevisao||'').split('/').reverse().join('-'));
+        var corte = new Date(); corte.setDate(corte.getDate()-90);
+        if (ultDt1 < corte) break;
+        pag1++;
+        await new Promise(function(r){setTimeout(r,400);});
+      }
+    } catch(e){ console.warn('MF Paris erro:', e.message); }
+
+    await new Promise(function(r){setTimeout(r,500);});
+
+    // Busca DMS (Lácteo e Sacaria)
+    try {
+      var pag2=1;
+      while(true) {
+        var d2 = await omieCallDMS('ListarOrdemProducao',[{
+          pagina:pag2, registros_por_pagina:50,
+          apenas_importado_api:'N',
+          ordenar_por:'DATA_PREVISAO', ordem_decrescente:'S'
+        }],'https://app.omie.com.br/api/v1/produtos/op/');
+        var lista2 = d2.cadastros||[];
+        if (!lista2.length) break;
+        lista2.forEach(function(op){ op._empresa='DMS'; ops.push(op); });
+        var total2 = d2.total_de_registros||lista2.length;
+        if (pag2*50>=total2||lista2.length<50) break;
+        var ultDt2 = new Date(((lista2[lista2.length-1].identificacao||{}).dDtPrevisao||'').split('/').reverse().join('-'));
+        if (ultDt2 < corte) break;
+        pag2++;
+        await new Promise(function(r){setTimeout(r,400);});
+      }
+    } catch(e){ console.warn('DMS erro:', e.message); } 
+
+    await new Promise(function(r){setTimeout(r,500);});
+
+    // Busca DMS (Lácteo e Sacaria)
+    try {
+      for (var p2 = 0; p2 < 3; p2++) {
+        var d2 = await omieCallDMS('ListarOrdemProducao',[{ pagina: 999-p2, registros_por_pagina:50 }],'https://app.omie.com.br/api/v1/produtos/op/');
+        var total2 = d2.total_de_paginas || 0;
+        if (total2 > 0 && (999-p2) > total2) {
+          var d2b = await omieCallDMS('ListarOrdemProducao',[{ pagina: total2, registros_por_pagina:50 }],'https://app.omie.com.br/api/v1/produtos/op/');
+          (d2b.cadastros||[]).forEach(function(op){ op._empresa='DMS'; ops.push(op); });
+          break;
+        }
+        (d2.cadastros||[]).forEach(function(op){ op._empresa='DMS'; ops.push(op); });
+        if ((d2.cadastros||[]).length < 50) break;
+      }
+    } catch(e){ console.warn('DMS erro:', e.message); }
+
+    // Filtra apenas não concluídas
+    ops = ops.filter(function(op){
+      return (op.outrasInf||{}).cConcluida === 'N';
+    });
+
+    console.log('[FechamentoOP] Total OPs abertas:', ops.length);
+
+    OPS_CARREGADAS = ops.map(function(op){
+      var id  = op.identificacao || {};
+      var inf = op.infAdicionais || {};
+      return {
+        nCodOP:      id.nCodOP      || '',
+        cCodIntOP:   id.cCodIntOP   || '',
+        nCodProd:    id.nCodProduto || 0,
+        cCodProd:    String(id.nCodProduto || ''),
+        descProd:    'Carregando...',
+        qtdPlan:     parseFloat(id.nQtde || 0),
+        etapa:       String(inf.cEtapa || '10'),
+        dataPrevisao:id.dDtPrevisao || '',
+        numOP:       id.cNumOP      || '',
+        empresa:     op._empresa    || '',
+        raw: op
+      };
+    });
+
+    // Renderiza primeiro com "Carregando..." para mostrar rápido
+    renderListaOPs();
+    toast(OPS_CARREGADAS.length + ' OP(s) carregada(s) — buscando produtos...', 'info');
+
+    // Busca nome do produto de cada OP em paralelo
+    await Promise.all(OPS_CARREGADAS.map(async function(op){
+      try {
+        var ep = 'https://app.omie.com.br/api/v1/geral/produtos/';
+        var isCafe = op.empresa === 'CAFE';
+        var key    = isCafe ? OMIE_KEY     : OMIE_KEY_DMS;
+        var secret = isCafe ? OMIE_SECRET  : OMIE_SECRET_DMS;
+        var codProd = parseInt(op.nCodProd) || 0;
+if (!codProd) { op.descProd = op.numOP || 'OP '+op.nCodOP; return; }
+var payload = { call:'ConsultarProduto', app_key:String(key), app_secret:String(secret), param:[{ codigo_produto: codProd }] };
+        var resp = await fetch('/api/omie',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({endpoint:ep,payload:payload})});
+        var data = await resp.json();
+       op.descProd = data.descricao || data.nome || 'OP '+op.numOP;
+var codCandidatos = [data.codigo, String(op.nCodProd)];
+op.cCodProd = codCandidatos.find(function(c){ return c && String(c).startsWith('12'); }) || data.codigo || '';
+      } catch(e){
+        op.descProd = 'OP '+op.numOP;
+      }
+    }));
+
+    // Renderiza novamente com os nomes
+    renderListaOPs();
+    toast(OPS_CARREGADAS.length + ' OP(s) carregada(s)', 'ok');
+
+  } catch(e) {
+    console.error(e);
+    toast('Erro ao carregar OPs: '+e.message.slice(0,80), 'err');
+    OPS_CARREGADAS = [
+      {nCodOP:'2648',cCodProd:'1230019',descProd:'LEITE EM PO INTEGRAL HORIZONTE 400g',qtdPlan:5000,etapa:'10',dataPrevisao:'07/06/2026'},
+      {nCodOP:'2649',cCodProd:'1230027',descProd:'LEITE EM PO INTEGRAL HORIZONTE 400g L2502',qtdPlan:3000,etapa:'10',dataPrevisao:'07/06/2026'},
+      {nCodOP:'2650',cCodProd:'1230045',descProd:'CAFE TORRADO E MOIDO BELVEDER VACUO 500G L2502',qtdPlan:2000,etapa:'10',dataPrevisao:'08/06/2026'},
+      {nCodOP:'2651',cCodProd:'1120028',descProd:'LEITE EM PO INTEGRAL HORIZONTE SACARIA 25KG',qtdPlan:10000,etapa:'10',dataPrevisao:'08/06/2026'},
+    ];
+    renderListaOPs();
+    toast('Modo demonstração ativo', 'info');
+  }
+  showLoading(false);
+}
+
+function detectarLinha(desc) {
+  if (!desc) return 'LACTEO';
+  var d = desc.toUpperCase();
+  if (d.includes('25KG') || d.includes('SACARIA')) return 'SACARIA';
+  if (d.includes('CAFE')||d.includes('CAFÉ')||d.includes('BELVEDER')||d.includes('VACUO')||d.includes('ALMOFADA')) return 'CAFE';
+  return 'LACTEO';
+}
+function detectarEmb(desc) {
+  if (!desc) return '400g';
+  var d = desc.toUpperCase();
+  if (d.includes('200G')) return '200g';
+  if (d.includes('400G')) return '400g';
+  if (d.includes('800G')) return '800g';
+  if (d.includes('1KG')||d.includes('1 KG')) return '1kg';
+  if (d.includes('500G')) return '500g';
+  if (d.includes('25KG')||d.includes('25 KG')) return '25kg';
+  return '400g';
+}
+function calcMetaHora(linha, emb, maquina) {
+  var vel;
+  if (linha==='SACARIA') vel = VEL_SAC[emb]||11;
+  else if (linha==='CAFE') vel = VEL_CAFE[emb]||8;
+  else vel = (maquina==='MAZ' ? VEL_MAZ[emb] : VEL_IND[emb]) || 8;
+  return (vel * OEE * 60).toFixed(0); // kg/hora
+}
+
+function renderListaOPs() {
+  var cont = document.getElementById('op-lista-container');
+  if (!OPS_CARREGADAS.length) {
+    cont.innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div><div style="font-size:13px;font-weight:600;">Nenhuma OP em aberto</div></div>';
+    return;
+  }
+  var grupos = { LACTEO:[], CAFE:[], SACARIA:[] };
+  OPS_CARREGADAS.forEach(function(op){
+    var linha = detectarLinha(op.descProd);
+    grupos[linha].push(op);
+  });
+  var html = '';
+  var linhas = [
+    { key:'LACTEO', label:'Lácteo', cls:'lacteo' },
+    { key:'CAFE',   label:'Café',   cls:'cafe' },
+    { key:'SACARIA',label:'Sacaria',cls:'sacaria' }
+  ];
+  linhas.forEach(function(l){
+    if (!grupos[l.key].length) return;
+    html += '<div class="op-group"><div class="op-group-label">'+l.label+' — '+grupos[l.key].length+' OP(s)</div><div class="op-list">';
+    grupos[l.key].forEach(function(op){
+      var etapaLabel = ETAPAS_LABEL[op.etapa] || op.etapa;
+      var etapaCls = {
+        '20':'etapa-planejada','30':'etapa-producao','40':'etapa-qualidade',
+        '50':'etapa-conferido','60':'etapa-concluido','70':'etapa-armazenado'
+      }[op.etapa] || 'etapa-planejada';
+      html += '<div class="op-card" onclick="selecionarOP(\''+op.nCodOP+'\')" id="op-card-'+op.nCodOP+'">'
+  +'<div class="op-num">'+(op.numOP||op.nCodOP)+'</div>'
+  +'<div class="op-info">'
+  +'<div class="op-prod">'+(op.descProd||'—')+'</div>'
+  +'<div class="op-det">SKU: '+(op.cCodProd||'—')+' · Qtd: '+(op.qtdPlan||0).toLocaleString('pt-BR')+' kg · Previsão: '+(op.dataPrevisao||'—')+'</div>'
+        +'</div>'
+        +'<span class="op-linha-badge '+l.cls+'">'+l.label+'</span>'
+        +'<span class="etapa-badge '+etapaCls+'">'+etapaLabel+'</span>'
+        +'</div>';
+    });
+    html += '</div></div>';
+  });
+  cont.innerHTML = html;
+}
+
+function selecionarOP(nCodOP) {
+  var op = OPS_CARREGADAS.find(function(o){ return String(o.nCodOP) === String(nCodOP); });
+  if (!op) return;
+  OP_SELECIONADA = op;
+  // Destaca o card selecionado
+  document.querySelectorAll('.op-card').forEach(function(c){ c.classList.remove('selected'); });
+  var card = document.getElementById('op-card-'+nCodOP);
+  if (card) card.classList.add('selected');
+  carregarApontamento(op);
+}
+
+// ═══════════════════════════════════════════════
+// APONTAMENTO
+// ═══════════════════════════════════════════════
+function carregarApontamento(op) {
+  document.getElementById('card-apontamento').style.display = 'block';
+  document.getElementById('card-apontamento').scrollIntoView({behavior:'smooth',block:'start'});
+
+  var linha   = detectarLinha(op.descProd);
+  var emb     = detectarEmb(op.descProd);
+  var obsOP = ((op.raw||{}).observacoes||{}).cObs || '';
+var maquina = linha==='LACTEO' ? 'IND' : (linha==='CAFE' ? 'ABIS' : 'EP04');
+if (obsOP.toUpperCase().includes('MAZIPAK')) maquina = 'MAZ';
+if (obsOP.toUpperCase().includes('INDUMAK')) maquina = 'IND';
+  var metaH   = calcMetaHora(linha, emb, maquina);
+
+  // Preenche campos
+  document.getElementById('ap-op').value       = op.numOP || op.nCodOP;
+  document.getElementById('ap-data').value      = new Date().toISOString().slice(0,10);
+  document.getElementById('ap-sku').value       = op.cCodProd || '—';
+  document.getElementById('ap-produto').value   = op.descProd || '—';
+  document.getElementById('ap-linha').value     = linha;
+  document.getElementById('ap-maquina').value   = maquina + (linha==='LACTEO'?' (Indumak)':linha==='CAFE'?' (Abis/Mazipak)':' (EP04)');
+  document.getElementById('ap-qtd-plan').value  = (op.qtdPlan||0).toLocaleString('pt-BR') + ' kg';
+  document.getElementById('ap-meta-hora').textContent = '⚡ Meta: ' + metaH + ' kg/h · ' + linha + ' · ' + emb + ' · OEE ' + (OEE*100).toFixed(0) + '%';
+
+  // Pipeline
+  renderPipeline(op.etapa);
+
+  // Tabela hora a hora
+  buildTabela(linha, metaH);
+
+  // Ações conforme etapa
+  renderAcoes(op.etapa);
+
+  calcTotais();
+}
+
+function renderPipeline(etapaAtual) {
+  var steps = [
+    {cod:'30', label:'Produção',   icon:'🏭'},
+    {cod:'40', label:'Qualidade',  icon:'🔬'},
+    {cod:'50', label:'Conferido',  icon:'✅'},
+    {cod:'60', label:'Concluído',  icon:'🎯'},
+    {cod:'70', label:'Armazenado', icon:'📦'}
+  ];
+  var html = '';
+  var passados = true;
+  steps.forEach(function(s, i){
+    if (s.cod === etapaAtual) passados = false;
+    var cls = (s.cod === etapaAtual) ? 'active' : (passados ? 'done' : 'pending');
+    // nota: "passados" controla se já passou ou ainda vai
+    var jaPassou = parseInt(etapaAtual) > parseInt(s.cod);
+    cls = (s.cod === etapaAtual) ? 'active' : (jaPassou ? 'done' : 'pending');
+    html += '<div class="pip-step '+cls+'">'+s.icon+' '+s.label+'</div>';
+    if (i < steps.length-1) html += '<span class="pip-arrow">›</span>';
+  });
+  document.getElementById('pipeline').innerHTML = html;
+}
+
+function buildTabela(linha, metaH) {
+  var corpo = document.getElementById('corpo-hora');
+  corpo.innerHTML = '';
+  var equipOptions = '';
+  if (linha==='LACTEO') equipOptions = '<option>—</option><option>Indumak</option><option>Mazipak</option><option>Enfardadeira</option><option>Outro</option>';
+  else if (linha==='CAFE') equipOptions = '<option>—</option><option>Abis</option><option>Mazipak Café</option><option>Outro</option>';
+  else equipOptions = '<option>—</option><option>EP04</option><option>Outro</option>';
+
+  for (var i = 0; i < N_HORAS; i++) {
+    var h = 8 + i;
+    var lbl = String(h).padStart(2,'0')+':00 – '+String(h+1).padStart(2,'0')+':00';
+    var tr = document.createElement('tr');
+    tr.id = 'hr-'+i;
+    tr.innerHTML = '<td>'+lbl+'</td>'
+      +'<td><input type="number" value="'+metaH+'" min="0" style="width:70px;" oninput="calcTotais()" id="meta-'+i+'"></td>'
+      +'<td><input type="number" placeholder="0" min="0" style="width:80px;" oninput="calcTotais()" id="real-'+i+'"></td>'
+      +'<td><input type="time" id="pi-'+i+'" oninput="onParada('+i+')"></td>'
+      +'<td><input type="time" id="pf-'+i+'" oninput="onParada('+i+')"></td>'
+      +'<td class="dur zero" id="dur-'+i+'">—</td>'
+      +'<td><select id="causa-'+i+'" style="font-size:11px;width:130px;"><option value="">—</option>'
+        +Object.entries(CAUSAS).map(function(e){ return '<option value="'+e[0]+'">'+e[0]+' – '+e[1]+'</option>'; }).join('')
+      +'</select></td>'
+      +'<td><select id="equip-'+i+'" style="font-size:11px;width:110px;">'+equipOptions+'</select></td>'
+      +'<td><input type="text" id="ret-'+i+'" placeholder="Tipo" style="width:80px;"></td>'
+      +'<td><input type="text" id="obs-'+i+'" placeholder="Observações"></td>';
+    corpo.appendChild(tr);
+  }
+}
+
+function diffMin(a, b) {
+  if (!a||!b) return 0;
+  var ah=parseInt(a.split(':')[0]), am=parseInt(a.split(':')[1]);
+  var bh=parseInt(b.split(':')[0]), bm=parseInt(b.split(':')[1]);
+  var d=(bh*60+bm)-(ah*60+am); if(d<0)d+=1440; return d;
+}
+
+function onParada(i) {
+  var pi = document.getElementById('pi-'+i).value;
+  var pf = document.getElementById('pf-'+i).value;
+  var min = diffMin(pi,pf);
+  var dc = document.getElementById('dur-'+i);
+  dc.textContent = min>0?min+' min':'—';
+  dc.className = 'dur'+(min===0?' zero':'');
+  document.getElementById('hr-'+i).classList.toggle('parada',min>0);
+  calcTotais();
+}
+
+function calcTotais() {
+  var plan=0, prod=0, minT=0, nP=0;
+  for (var i=0;i<N_HORAS;i++) {
+    plan += parseFloat(document.getElementById('meta-'+i).value)||0;
+    prod += parseFloat(document.getElementById('real-'+i).value)||0;
+    var m = diffMin(document.getElementById('pi-'+i).value, document.getElementById('pf-'+i).value);
+    if (m>0){minT+=m;nP++;}
+  }
+  var turnoMin = 600; // 10h (seg-qui) / 540 (sexta)
+  var disp = prod>0||nP>0 ? Math.max(0,Math.round((1-minT/turnoMin)*100)) : null;
+  document.getElementById('tot-plan').textContent = plan.toLocaleString('pt-BR');
+  document.getElementById('tot-prod').textContent = prod.toLocaleString('pt-BR');
+  document.getElementById('tot-min').textContent  = minT;
+  document.getElementById('tot-np').textContent   = nP;
+  document.getElementById('tot-disp').textContent = disp!==null?disp+'%':'—';
+  var db = document.getElementById('tot-disp').parentElement;
+  db.className = 'tot'+(disp===null?'':(disp>=90?' ok':disp>=80?' warn':' crit'));
+}
+
+// ═══════════════════════════════════════════════
+// AÇÕES POR ETAPA
+// ═══════════════════════════════════════════════
+function renderAcoes(etapa) {
+  var cont = document.getElementById('acoes-container');
+  var html = '';
+
+  if (etapa === '10' || etapa === '20' || etapa === '30') {
+    // Etapa produção → pode preencher e enviar para qualidade
+    html += '<p style="font-size:12px;color:var(--ink3);margin-bottom:14px;">Preencha o apontamento hora a hora acima. Ao finalizar, clique em <strong>Salvar e Enviar para Qualidade</strong>.</p>';
+    html += '<div class="btn-row">'
+      +'<button class="btn btn-primary" onclick="salvarApontamento()" id="btn-salvar"><span>💾</span> Salvar apontamento</button>'
+      +'<button class="btn btn-qualidade" onclick="moverEtapa(\'qualidade\')"><span>🔬</span> Enviar para Qualidade</button>'
+      +'</div>';
+  } else if (etapa === '40') {
+    html += '<p style="font-size:12px;color:var(--ink3);margin-bottom:14px;">OP aguardando aprovação da <strong>Qualidade</strong>. Clique no botão para registrar aprovação (requer senha).</p>';
+    html += '<div class="btn-row">'
+      +'<button class="btn btn-conferido" onclick="moverEtapa(\'conferido\')"><span>✅</span> Aprovar — Mover para Conferido</button>'
+      +'</div>';
+  } else if (etapa === '50') {
+    html += '<p style="font-size:12px;color:var(--ink3);margin-bottom:14px;">OP em <strong>Conferido</strong>. Clique para validar e mover para Concluído (requer senha).</p>';
+    html += '<div class="btn-row">'
+      +'<button class="btn btn-concluido" onclick="moverEtapa(\'concluido\')"><span>🎯</span> Validar — Mover para Concluído</button>'
+      +'</div>';
+  } else if (etapa === '60') {
+    html += '<p style="font-size:12px;color:var(--ink3);margin-bottom:14px;">OP <strong>Concluída</strong>. Logística deve confirmar armazenamento (requer senha).</p>';
+    html += '<div class="btn-row">'
+      +'<button class="btn btn-armazenado" onclick="moverEtapa(\'armazenado\')"><span>📦</span> Confirmar — Mover para Armazenado</button>'
+      +'</div>';
+  } else {
+    html += '<p style="font-size:12px;color:var(--green);font-weight:600;">✅ OP finalizada e armazenada.</p>';
+  }
+
+  cont.innerHTML = html;
+}
+
+// ═══════════════════════════════════════════════
+// SALVAR APONTAMENTO
+// ═══════════════════════════════════════════════
+function salvarApontamento() {
+  pedirSenha('Salvar Apontamento', 'Informe sua senha para registrar o apontamento.', USUARIOS_PRODUCAO.map(function(u){return u.senha;}), function(){
+    _executarSalvar();
+  });
+}
+
+async function _executarSalvar() {
+  if (!OP_SELECIONADA) { toast('Nenhuma OP selecionada','err'); return; }
+  showLoading(true);
+  try {
+    var plan=0, prod=0, linhas=[];
+    for (var i=0;i<N_HORAS;i++) {
+      var meta  = parseFloat(document.getElementById('meta-'+i).value)||0;
+      var real  = parseFloat(document.getElementById('real-'+i).value)||0;
+      var pi    = document.getElementById('pi-'+i).value;
+      var pf    = document.getElementById('pf-'+i).value;
+      var causa = document.getElementById('causa-'+i).value;
+      var equip = document.getElementById('equip-'+i).value;
+      var ret   = document.getElementById('ret-'+i).value;
+      var obs   = document.getElementById('obs-'+i).value;
+      var dur   = diffMin(pi,pf);
+      plan += meta; prod += real;
+      if (real>0||dur>0) linhas.push({hora:6+i,meta,real,pi,pf,dur,causa,equip,ret,obs});
+    }
+    var disp = Math.max(0,Math.round((1-calcMinTotal()/480)*100));
+    var obsTexto = '[OPUS Apontamento '+new Date().toLocaleDateString('pt-BR')+']'
+      +' Produzido: '+prod.toLocaleString('pt-BR')+' kg'
+      +' | Planejado: '+plan.toLocaleString('pt-BR')+' kg'
+      +' | Disponibilidade: '+disp+'%'
+      +' | Paradas: '+document.getElementById('tot-np').textContent+' ('+document.getElementById('tot-min').textContent+' min)'
+      +' | Operador: '+(document.getElementById('ap-op-nome').value||'—')
+      +' | Turno: '+document.getElementById('ap-turno').value;
+    await omieAtualizarObs(OP_SELECIONADA.nCodOP, obsTexto);
+    toast('Apontamento salvo na OP '+OP_SELECIONADA.nCodOP,'ok');
+  } catch(e) {
+    toast('Erro ao salvar: '+e.message,'err');
+  }
+  showLoading(false);
+}
+
+function calcMinTotal(){
+  var t=0;
+  for(var i=0;i<N_HORAS;i++) t+=diffMin(document.getElementById('pi-'+i).value,document.getElementById('pf-'+i).value);
+  return t;
+}
+
+// ═══════════════════════════════════════════════
+// MOVER ETAPA
+// ═══════════════════════════════════════════════
+function moverEtapa(novaEtapaKey) {
+  var labels = {
+    qualidade:'Qualidade', conferido:'Conferido',
+    concluido:'Concluído', armazenado:'Armazenado'
+  };
+  var senhas = SENHAS_ETAPA[novaEtapaKey] || [];
+  pedirSenha(
+    'Mover para '+labels[novaEtapaKey],
+    'Informe sua senha para mover a OP para a etapa '+labels[novaEtapaKey]+'.',
+    senhas,
+    function() { _executarMoverEtapa(novaEtapaKey, labels[novaEtapaKey]); }
+  );
+}
+
+async function _executarMoverEtapa(etapaKey, etapaLabel) {
+  if (!OP_SELECIONADA) { toast('Nenhuma OP selecionada','err'); return; }
+  showLoading(true);
+  try {
+    var novaCod = ETAPAS_OMIE[etapaKey];
+    var callFn = OP_SELECIONADA.empresa === 'CAFE' ? omieCall : omieCallDMS;
+
+    // Na etapa Armazenado — conclui a OP com quantidade produzida
+    if (etapaKey === 'armazenado') {
+      var prod = 0;
+      for (var i = 0; i < N_HORAS; i++) {
+        prod += parseFloat(document.getElementById('real-'+i).value)||0;
+      }
+      var dataAp = document.getElementById('ap-data').value;
+      var dtArr = dataAp.split('-');
+      var dtConclusao = dtArr[2]+'/'+dtArr[1]+'/'+dtArr[0];
+
+      await callFn('ConcluirOrdemProducao',[{
+        cCodIntOP: '',
+        nCodOP: parseInt(OP_SELECIONADA.nCodOP),
+        dDtConclusao: dtConclusao,
+        nQtdeProduzida: prod,
+        cObsConclusao: prod.toLocaleString('pt-BR')+' kg produzidos | Aprovado pela Logística'
+      }], 'https://app.omie.com.br/api/v1/produtos/op/');
+    } else {
+      // Para as demais etapas só muda a etapa
+      await callFn('AlterarOrdemProducao',[{
+        identificacao:{ nCodOP: parseInt(OP_SELECIONADA.nCodOP) },
+        infAdicionais:{ cEtapa: novaCod }
+      }], 'https://app.omie.com.br/api/v1/produtos/op/');
+    }
+
+    // Salva observação em todas as etapas
+    var obsMsg = '[OPUS '+new Date().toLocaleDateString('pt-BR')+'] Movido para '+etapaLabel+' por usuário autorizado.';
+    await omieAtualizarObs(OP_SELECIONADA.nCodOP, obsMsg);
+
+    // Atualiza localmente
+    OP_SELECIONADA.etapa = novaCod;
+    var opNaLista = OPS_CARREGADAS.find(function(o){ return String(o.nCodOP)===String(OP_SELECIONADA.nCodOP); });
+    if (opNaLista) opNaLista.etapa = novaCod;
+
+    renderPipeline(novaCod);
+    renderAcoes(novaCod);
+    renderListaOPs();
+    toast('OP movida para '+etapaLabel+' com sucesso!','ok');
+
+  } catch(e) {
+    toast('Erro: '+e.message.slice(0,80),'err');
+  }
+  showLoading(false);
+}
+async function omieAtualizarObs(nCodOP, novaObs) {
+  var callFn = OP_SELECIONADA && OP_SELECIONADA.empresa === 'CAFE' ? omieCall : omieCallDMS;
+  var obsAtual = '';
+  try {
+    var d = await callFn('ConsultarOrdemProducao',[{nCodOP:parseInt(nCodOP)}],'https://app.omie.com.br/api/v1/produtos/op/');
+    obsAtual = (d.observacoes||{}).cObs || '';
+  } catch(e){}
+  var obsCompleta = obsAtual ? (obsAtual.trim()+'\n'+novaObs) : novaObs;
+  await callFn('AlterarOrdemProducao',[{
+    identificacao:{ nCodOP:parseInt(nCodOP) },
+    observacoes:{ cObs: obsCompleta }
+  }], 'https://app.omie.com.br/api/v1/produtos/op/');
+}
+
+// ═══════════════════════════════════════════════
+// MODAL DE SENHA
+// ═══════════════════════════════════════════════
+function pedirSenha(titulo, sub, senhasValidas, callback) {
+  _modalCallback = { senhas: senhasValidas, fn: callback };
+  document.getElementById('modal-titulo').textContent = titulo;
+  document.getElementById('modal-sub').textContent = sub;
+  document.getElementById('modal-input').value = '';
+  document.getElementById('modal-err').textContent = '';
+  document.getElementById('modal-senha').classList.add('on');
+  setTimeout(function(){ document.getElementById('modal-input').focus(); }, 80);
+}
+
+function confirmarModal() {
+  var val = document.getElementById('modal-input').value;
+  if (!_modalCallback) { fecharModal(); return; }
+  var ok = _modalCallback.senhas.some(function(s){ return s === val; });
+  if (ok) {
+    fecharModal();
+    _modalCallback.fn();
+    _modalCallback = null;
+  } else {
+    document.getElementById('modal-err').textContent = '✗ Senha incorreta';
+    document.getElementById('modal-input').value = '';
+    document.getElementById('modal-input').focus();
+  }
+}
+
+function fecharModal() {
+  document.getElementById('modal-senha').classList.remove('on');
+}
+
+document.getElementById('modal-input').addEventListener('keydown', function(e){
+  if (e.key==='Enter') confirmarModal();
+  if (e.key==='Escape') fecharModal();
+});
+
+// ═══════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════
+function showLoading(v) {
+  document.getElementById('loading').classList.toggle('on', v);
+}
+
+function toast(msg, tipo) {
+  var cont = document.getElementById('toast');
+  var el = document.createElement('div');
+  el.className = 'toast-item toast-'+(tipo||'info');
+  el.textContent = msg;
+  cont.appendChild(el);
+  setTimeout(function(){ el.remove(); }, 3500);
+}
+
+// INIT
+document.getElementById('ap-data').value = new Date().toISOString().slice(0,10);
+</script>
+</body>
+</html>

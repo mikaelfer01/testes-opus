@@ -1,0 +1,941 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>OPUS — Estoque Comercial</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --cream:#F2EFE8;--card:#FDFAF5;--icon:#EDE8DF;
+  --navy:#1A2B4A;--navy-d:#0F1D33;--gold:#B8864A;
+  --gold-b:rgba(184,134,74,.2);--gold-l:rgba(184,134,74,.1);
+  --div:#C8B99A;--muted:#5A544E;
+  --green:#2E7D52;--green-l:#E4EDE4;
+  --red:#B03A2E;--red-l:#FDECEA;
+  --amber:#9A6B1A;--amber-l:#FFF3DC;
+  --blue:#1A56A0;--blue-l:#E8F0FB;
+  --purple:#5b21b6;--purple-l:rgba(109,40,217,.1);
+}
+html,body{min-height:100%;background:var(--cream);font-family:'DM Sans',sans-serif;color:var(--navy);-webkit-font-smoothing:antialiased;font-size:14px;}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+
+/* ── TABS BAR (igual ao calendário) ───────────────────────── */
+.tabs-bar{
+  position:sticky;top:0;z-index:150;
+  display:flex;align-items:center;
+  background:#0d1f3c;
+  padding:0 20px;height:54px;
+  border-bottom:2px solid #b8902a;
+  box-shadow:0 2px 16px rgba(13,31,60,.35);
+}
+.tabs-brand{
+  font-family:'Playfair Display',serif;font-style:italic;
+  font-size:15px;font-weight:700;color:#e8c96a;
+  margin-right:20px;white-space:nowrap;flex-shrink:0;
+}
+.tabs-brand small{
+  font-family:'Inter',sans-serif;font-style:normal;
+  font-size:9px;font-weight:800;letter-spacing:.22em;
+  text-transform:uppercase;color:#fff;
+  margin-left:7px;vertical-align:middle;
+}
+.tab-link{
+  height:54px;padding:0 10px;
+  display:flex;align-items:center;gap:5px;
+  font-size:10px;font-weight:800;
+  color:rgba(255,255,255,.85);
+  text-decoration:none;
+  border-bottom:3px solid transparent;
+  border-top:none;border-left:none;border-right:none;
+  background:transparent;font-family:inherit;cursor:pointer;
+  letter-spacing:.04em;text-transform:uppercase;
+  transition:all .18s;white-space:nowrap;
+}
+.tab-link:hover{color:#fff;background:rgba(255,255,255,.07);}
+.tab-link.active{color:#e8c96a;border-bottom-color:#b8902a;background:rgba(184,144,42,.1);}
+.tab-link svg{width:11px;height:11px;opacity:.75;flex-shrink:0;}
+.tab-link:hover svg,.tab-link.active svg{opacity:1;}
+
+/* ── STATUS BAR ───────────────────────────────────────────── */
+.status-bar{
+  background:#0d1f3c;border-bottom:1px solid rgba(184,144,42,.2);
+  padding:6px 20px;
+  display:flex;align-items:center;justify-content:space-between;
+  gap:12px;flex-wrap:wrap;
+}
+.sb-left{display:flex;align-items:center;gap:10px;}
+.sb-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+.sb-dot.ok{background:#2E7D52;animation:pulse 2s infinite;}
+.sb-dot.err{background:#B03A2E;}
+.sb-dot.idle{background:#C8B99A;}
+.sb-txt{font-size:10px;color:var(--div);}
+.sb-right{display:flex;align-items:center;gap:8px;}
+.btn-sm{
+  font-size:10px;font-weight:600;color:var(--div);
+  background:transparent;border:1px solid rgba(255,255,255,.12);
+  border-radius:6px;padding:4px 12px;cursor:pointer;
+  font-family:inherit;transition:all .15s;
+}
+.btn-sm:hover{background:rgba(255,255,255,.08);color:#fff;}
+
+/* ── WRAP ─────────────────────────────────────────────────── */
+.wrap{padding:20px 24px 60px;display:flex;flex-direction:column;gap:14px;max-width:1500px;margin:0 auto;}
+
+/* ── KPIs ─────────────────────────────────────────────────── */
+.kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+.kpi{background:var(--card);border:0.5px solid var(--gold-b);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:4px;animation:fadeUp .35s ease both;}
+.kpi-label{font-size:9px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.12em;}
+.kpi-value{font-size:24px;font-weight:700;color:var(--navy);font-variant-numeric:tabular-nums;}
+.kpi-sub{font-size:10px;color:var(--muted);}
+.kpi.danger .kpi-value{color:var(--red);}
+.kpi.warn .kpi-value{color:var(--amber);}
+.kpi.ok .kpi-value{color:var(--green);}
+
+/* ── VIEW TABS ────────────────────────────────────────────── */
+.view-tabs{display:flex;gap:0;background:var(--card);border:0.5px solid var(--gold-b);border-radius:12px;padding:4px;width:fit-content;}
+.view-tab{padding:9px 22px;border:none;background:transparent;border-radius:8px;font-family:inherit;font-size:12px;font-weight:700;color:var(--muted);cursor:pointer;letter-spacing:.04em;transition:all .15s;text-transform:uppercase;display:flex;align-items:center;gap:6px;}
+.view-tab.active{background:var(--navy);color:#fff;}
+.view-tab:not(.active):hover{color:var(--navy);}
+.view-tab .count{background:rgba(255,255,255,.15);font-size:10px;padding:1px 7px;border-radius:8px;}
+.view-tab:not(.active) .count{background:var(--icon);color:var(--muted);}
+
+/* ── FILTROS ──────────────────────────────────────────────── */
+.filters{background:var(--card);border:0.5px solid var(--gold-b);border-radius:14px;padding:14px 18px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+.filter-group{display:flex;align-items:center;gap:6px;}
+.filter-label{font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;}
+.filter-select,.filter-input{padding:7px 10px;border:1.5px solid var(--gold-b);border-radius:7px;background:#fff;font-family:inherit;font-size:11px;color:var(--navy);outline:none;min-width:120px;}
+.filter-select:focus,.filter-input:focus{border-color:var(--gold);}
+.filter-input{min-width:220px;}
+
+/* ── TABELA ───────────────────────────────────────────────── */
+.sec{background:var(--card);border:0.5px solid var(--gold-b);border-radius:16px;padding:18px 20px;animation:fadeUp .35s ease both;}
+.sec-title{font-size:9px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.12em;margin-bottom:14px;padding-bottom:8px;border-bottom:0.5px solid var(--gold-l);display:flex;align-items:center;justify-content:space-between;}
+.estoque-table{width:100%;border-collapse:collapse;font-size:12px;}
+.estoque-table thead tr{background:var(--navy);}
+.estoque-table th{padding:10px 12px;text-align:left;font-size:9px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.08em;white-space:nowrap;position:sticky;top:0;background:#1A2B4A;z-index:2;}
+.estoque-table th.num,.estoque-table td.num{text-align:right;font-variant-numeric:tabular-nums;}
+.estoque-table th.center,.estoque-table td.center{text-align:center;}
+.estoque-table tbody tr{border-bottom:0.5px solid var(--gold-l);cursor:pointer;transition:background .12s;}
+.estoque-table tbody tr:hover{background:var(--cream);}
+.estoque-table td{padding:10px 12px;vertical-align:middle;}
+.estoque-table td.cod{font-family:monospace;font-size:11px;color:var(--muted);}
+.estoque-table td.produto{font-weight:600;color:var(--navy);max-width:340px;}
+.estoque-table td.qtd-disp{font-weight:800;font-size:13px;}
+.disp-ok{color:var(--green);}
+.disp-zero{color:var(--red);}
+.disp-baixo{color:var(--amber);}
+
+.status-pill{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:11px;font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;}
+.s-ok{background:var(--green-l);color:var(--green);}
+.s-zero{background:var(--red-l);color:var(--red);}
+.s-baixo{background:var(--amber-l);color:var(--amber);}
+
+/* Badge de pedidos */
+.ped-badge{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:20px;padding:0 7px;border-radius:10px;background:var(--icon);color:var(--navy);font-size:10px;font-weight:700;border:0.5px solid var(--gold-b);}
+.ped-badge.has-ped{background:var(--amber-l);color:var(--amber);border-color:rgba(154,107,26,.25);}
+
+/* OPs em produção */
+.op-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:8px;background:var(--blue-l);color:var(--blue);font-size:10px;font-weight:700;}
+
+.vazio{text-align:center;padding:48px 20px;color:var(--muted);font-size:13px;}
+.vazio-icon{font-size:36px;margin-bottom:10px;}
+
+/* Botões */
+.btn-primary{padding:9px 18px;border:none;border-radius:10px;background:var(--navy);color:#fff;font-family:inherit;font-size:11.5px;font-weight:600;cursor:pointer;transition:all .18s;display:inline-flex;align-items:center;gap:7px;}
+.btn-primary:hover{background:var(--navy-d);transform:translateY(-1px);}
+.btn-secondary{padding:9px 16px;border:1.5px solid var(--gold-b);border-radius:10px;background:transparent;color:var(--navy);font-family:inherit;font-size:11.5px;font-weight:500;cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:7px;}
+.btn-secondary:hover{border-color:var(--gold);background:var(--icon);}
+
+/* Modal */
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:300;display:none;align-items:center;justify-content:center;}
+.modal.open{display:flex;}
+.modal-box{background:var(--card);border-radius:18px;padding:24px;width:760px;max-width:94vw;max-height:86vh;overflow-y:auto;border:0.5px solid var(--gold-b);}
+.modal-title{font-size:15px;font-weight:700;color:var(--navy);margin-bottom:2px;}
+.modal-sub{font-size:11px;color:var(--muted);margin-bottom:16px;line-height:1.6;}
+.modal-close{float:right;background:transparent;border:none;cursor:pointer;color:var(--muted);font-size:20px;line-height:1;}
+.modal-resumo{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px;}
+.modal-resumo-card{background:var(--cream);border:0.5px solid var(--gold-b);border-radius:10px;padding:10px 12px;}
+.modal-resumo-label{font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px;}
+.modal-resumo-value{font-size:18px;font-weight:700;color:var(--navy);}
+.pedidos-table{width:100%;border-collapse:collapse;font-size:11.5px;}
+.pedidos-table th{background:var(--navy);color:var(--gold);padding:8px 9px;text-align:left;font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;}
+.pedidos-table td{padding:7px 9px;border-bottom:0.5px solid var(--gold-l);}
+
+/* Toast */
+.toast{position:fixed;bottom:24px;right:24px;z-index:500;display:flex;flex-direction:column;gap:8px;}
+.toast-item{padding:10px 16px;border-radius:10px;font-size:12px;font-weight:500;display:flex;align-items:center;gap:8px;animation:fadeUp .25s ease;box-shadow:0 4px 16px rgba(0,0,0,.15);}
+.toast-ok{background:var(--green);color:#fff;}
+.toast-err{background:var(--red);color:#fff;}
+.toast-info{background:var(--navy);color:#fff;}
+
+/* Seção de OPs */
+.ops-section{background:var(--card);border:0.5px solid var(--gold-b);border-radius:16px;padding:18px 20px;}
+.ops-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;margin-top:12px;}
+.op-card{background:var(--cream);border:0.5px solid var(--gold-b);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:6px;}
+.op-card-top{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.op-num{font-family:monospace;font-size:10px;font-weight:700;color:var(--muted);}
+.op-st{font-size:9px;font-weight:700;padding:2px 7px;border-radius:5px;text-transform:uppercase;}
+.op-st.pendente{background:#e4dfd2;color:#0b1220;}
+.op-st.andamento{background:var(--amber-l);color:var(--amber);}
+.op-st.encerrada{background:var(--green-l);color:var(--green);}
+.op-desc{font-size:11.5px;font-weight:700;color:var(--navy);line-height:1.3;}
+.op-nums{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.op-num-val{font-size:11px;color:var(--muted);}
+.op-num-val strong{color:var(--navy);}
+.op-bar-bg{height:4px;background:rgba(0,0,0,.08);border-radius:2px;overflow:hidden;margin-top:4px;}
+.op-bar-fill{height:100%;border-radius:2px;background:var(--navy);transition:width .5s;}
+</style>
+</head>
+<body>
+
+<!-- ── TABS BAR (idêntica ao calendário) ─────────────────── -->
+<nav class="tabs-bar">
+  <span class="tabs-brand">Grupo MF Paris<small>OPUS</small></span>
+  <a href="index.html" class="tab-link">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>Início
+  </a>
+  <a href="calendario.html" class="tab-link">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><rect x="7" y="13" width="3" height="3" rx="0.5"/><rect x="14" y="13" width="3" height="3" rx="0.5"/></svg>Calendário
+  </a>
+  <a href="apontamento.html" class="tab-link">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>Produtividade
+  </a>
+  <a href="simulador.html" class="tab-link">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 3h15v13H1zM16 8h4l3 3v5h-7z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>Simulador de Frete
+  </a>
+  <a href="farol.html" class="tab-link">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="4"/><path d="M9 4h6l1 4H8L9 4z"/><path d="M8 8l-1 8h10l-1-8"/><line x1="7" y1="16" x2="5" y2="20"/><line x1="17" y1="16" x2="19" y2="20"/><line x1="5" y1="20" x2="19" y2="20"/><line x1="10" y1="20" x2="10" y2="22"/><line x1="14" y1="20" x2="14" y2="22"/><line x1="2" y1="10" x2="5" y2="11"/><line x1="22" y1="10" x2="19" y2="11"/></svg>Farol de Entregas
+  </a>
+  <button type="button" class="tab-link active">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="2" y1="17" x2="18" y2="17"/><path d="M4 17V7h8v10"/><path d="M12 10h4l2 4v3h-6V10z"/><circle cx="6" cy="19.5" r="1.5"/><circle cx="15" cy="19.5" r="1.5"/><line x1="4" y1="10" x2="2" y2="10"/><line x1="4" y1="13" x2="2" y2="13"/></svg>Estoque
+  </button>
+  <a href="programacao.html" class="tab-link">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Programação da Produção
+  </a>
+  <a href="simulador-producao.html" class="tab-link">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>Simulador de Programação
+  </a>
+  <a href="fechamento-op.html" class="tab-link">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6M9 12h6M9 15h4"/></svg>Fechamento de OP
+  </a>
+  <a href="carteira.html" class="tab-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7H4a2 2 0 00-2 2v9a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2z"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/><line x1="8" y1="12" x2="16" y2="12"/></svg>Carteira</a>
+  </a>
+  <a href="roteirizador.html" class="tab-link">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>Roteirização
+  </a>
+</nav>
+
+<!-- ── STATUS BAR ──────────────────────────────────────────── -->
+<div class="status-bar">
+  <div class="sb-left">
+    <div class="sb-dot idle" id="sheets-dot"></div>
+    <span class="sb-txt" id="sheets-status">Aguardando...</span>
+    <span style="color:rgba(200,185,154,.3);font-size:12px;">·</span>
+    <div class="sb-dot idle" id="omie-dot"></div>
+    <span class="sb-txt" id="omie-status">OPs não carregadas</span>
+  </div>
+  <div class="sb-right">
+    <button class="btn-sm" onclick="atualizar()">↻ Atualizar tudo</button>
+  </div>
+</div>
+
+<!-- ── CONTEÚDO ────────────────────────────────────────────── -->
+<div class="wrap">
+
+  <!-- KPIs -->
+  <div class="kpi-row">
+    <div class="kpi ok"><span class="kpi-label">SKUs ativos</span><span class="kpi-value" id="kpi-skus">—</span><span class="kpi-sub">com estoque ou pedido</span></div>
+    <div class="kpi"><span class="kpi-label">Estoque disponível</span><span class="kpi-value" id="kpi-estoque">—</span><span class="kpi-sub">soma da aba selecionada</span></div>
+    <div class="kpi warn"><span class="kpi-label">Em produção</span><span class="kpi-value" id="kpi-ops">—</span><span class="kpi-sub">OPs abertas no OMIE</span></div>
+    <div class="kpi danger"><span class="kpi-label">SKUs negativos</span><span class="kpi-value" id="kpi-neg">—</span><span class="kpi-sub">disponível &lt; 0</span></div>
+  </div>
+
+  <!-- View tabs + botões -->
+  <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+    <div class="view-tabs">
+      <button class="view-tab active" data-view="comercial" onclick="trocarView('comercial')">
+        Comercial <span class="count" id="cnt-comercial">0</span>
+      </button>
+      <button class="view-tab" data-view="licitacao" onclick="trocarView('licitacao')">
+        Licitação <span class="count" id="cnt-licitacao">0</span>
+      </button>
+    </div>
+    <div style="flex:1;"></div>
+    <button class="btn-secondary" onclick="exportarExcel()">📊 Exportar Excel</button>
+    <button class="btn-primary" onclick="atualizar()">↻ Atualizar dados</button>
+  </div>
+
+  <!-- Filtros -->
+  <div class="filters">
+    <div class="filter-group">
+      <span class="filter-label">Status</span>
+      <select class="filter-select" id="f-status" onchange="aplicarFiltros()">
+        <option value="">Todos</option>
+        <option value="ok">Disponível</option>
+        <option value="baixo">Estoque baixo</option>
+        <option value="zero">Sem estoque / Negativo</option>
+      </select>
+    </div>
+    <div class="filter-group" style="flex:1;min-width:240px;">
+      <span class="filter-label">Buscar</span>
+      <input type="text" class="filter-input" id="f-busca" placeholder="SKU ou descrição..." oninput="aplicarFiltros()" style="width:100%;"/>
+    </div>
+  </div>
+
+  <!-- Tabela de estoque -->
+  <div class="sec">
+    <div class="sec-title">
+      <span id="tabela-titulo">Estoque — Comercial</span>
+      <span style="font-size:10px;color:var(--muted);font-weight:500;text-transform:none;letter-spacing:0;" id="tabela-info"></span>
+    </div>
+    <div style="overflow-x:auto;max-height:55vh;overflow-y:auto;">
+      <table class="estoque-table">
+        <thead>
+          <tr>
+            <th>SKU</th>
+            <th>Descrição</th>
+            <th class="num">Estoque Total</th>
+            <th class="num">Comprometido</th>
+            <th class="num">Disponível</th>
+            <th class="center">Pedidos</th>
+            <th class="num">Em Produção (OPs)</th>
+            <th class="center">Status</th>
+          </tr>
+        </thead>
+        <tbody id="tbody-estoque"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- OPs em produção -->
+  <div class="ops-section">
+    <div class="sec-title">
+      <span>Ordens de Produção em Aberto</span>
+      <span style="font-size:10px;color:var(--muted);font-weight:500;text-transform:none;letter-spacing:0;" id="ops-info">Carregando via OMIE...</span>
+    </div>
+    <div id="ops-grid" class="ops-grid">
+      <div style="grid-column:1/-1;text-align:center;padding:24px;color:var(--muted);font-style:italic;font-size:12px;">
+        Aguardando carregamento das OPs...
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Modal drill-down -->
+<div class="modal" id="drill-modal">
+  <div class="modal-box">
+    <button class="modal-close" onclick="fecharDrill()">×</button>
+    <div class="modal-title" id="drill-titulo">—</div>
+    <div class="modal-sub" id="drill-sub">—</div>
+    <div class="modal-resumo">
+      <div class="modal-resumo-card"><div class="modal-resumo-label">Estoque Total</div><div class="modal-resumo-value" id="drill-estq">—</div></div>
+      <div class="modal-resumo-card"><div class="modal-resumo-label">Comprometido</div><div class="modal-resumo-value" id="drill-comp">—</div></div>
+      <div class="modal-resumo-card"><div class="modal-resumo-label">Disponível</div><div class="modal-resumo-value" id="drill-disp">—</div></div>
+    </div>
+    <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;">Pedidos vinculados</div>
+    <table class="pedidos-table">
+      <thead><tr><th>Nº Pedido</th><th>Descrição</th></tr></thead>
+      <tbody id="drill-tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+
+/* ============================================================
+   CONFIGURAÇÃO
+   ============================================================ */
+const SHEETS_ID   = '1Z939E63719MpVGnGmJzixKRFToe4-maSpqBsmsfPYnw';
+const SHEETS_ABAS = {
+  comercial: 'COMERCIAL',
+  licitacao: 'LICITAÇÃO'
+};
+
+// OMIE — mesmo do calendário
+const EP_OP   = 'https://app.omie.com.br/api/v1/produtos/op/';
+const EP_PROD = 'https://app.omie.com.br/api/v1/geral/produtos/';
+const USE_PROXY = !['localhost','127.0.0.1',''].includes(window.location.hostname);
+const OMIE_KEYS = [
+  {nome:'MF Paris', key:'952260381072',  secret:'8300b385eeec583c71439709ab866fc7'},
+  {nome:'DMS',      key:'1340821992510', secret:'dac287f9b3ec422dc93da6cdbcc3e0b2'},
+];
+
+/* ============================================================
+   STATE
+   ============================================================ */
+let viewAtual  = 'comercial';
+let dadosSheet = { comercial:[], licitacao:[] };
+let OPS        = [];
+let dadosCalc  = [];
+
+/* ============================================================
+   OMIE API (igual ao calendário)
+   ============================================================ */
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+async function omieCall(ep, call, key, secret, param, _r) {
+  const payload = { call, app_key: String(key), app_secret: String(secret), param };
+  let resp;
+  if (USE_PROXY) {
+    resp = await fetch('/api/omie', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ endpoint: ep, payload })
+    });
+  } else {
+    resp = await fetch(ep, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  }
+  if (!resp.ok) throw new Error('HTTP ' + resp.status);
+  const data = await resp.json();
+  if (data.faultstring) {
+    if (data.faultstring.includes('REDUNDANT') && !_r) {
+      let s = 35;
+      const m = data.faultstring.match(/Aguarde (\d+) segundo/);
+      if (m) s = parseInt(m[1]) + 3;
+      await sleep(s * 1000);
+      return omieCall(ep, call, key, secret, param, true);
+    }
+    throw new Error(data.faultstring);
+  }
+  return data;
+}
+
+/* ============================================================
+   GOOGLE SHEETS — leitura via gviz/tq CSV
+   ============================================================ */
+function csvParse(txt) {
+  const linhas = []; let cur = [], val = '', dentro = false;
+  for (let i = 0; i < txt.length; i++) {
+    const c = txt[i];
+    if (dentro) {
+      if (c === '"' && txt[i+1] === '"') { val += '"'; i++; }
+      else if (c === '"') dentro = false;
+      else val += c;
+    } else {
+      if (c === '"') dentro = true;
+      else if (c === ',') { cur.push(val); val = ''; }
+      else if (c === '\n') { cur.push(val); linhas.push(cur); cur = []; val = ''; }
+      else if (c !== '\r') val += c;
+    }
+  }
+  if (val.length || cur.length) { cur.push(val); linhas.push(cur); }
+  return linhas.filter(l => l.length && l.some(x => String(x).trim() !== ''));
+}
+
+function normHeader(h) {
+  return String(h || '').trim().toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+function parseNum(v) {
+  return parseFloat(String(v || '0').replace(/\./g, '').replace(',', '.')) || 0;
+}
+
+async function fetchAba(viewKey) {
+  const aba = SHEETS_ABAS[viewKey];
+  const url = `https://docs.google.com/spreadsheets/d/${SHEETS_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(aba)}`;
+  const resp = await fetch(url, { cache: 'no-store' });
+  if (!resp.ok) throw new Error('HTTP ' + resp.status + ' ao ler aba ' + aba);
+  const linhas = csvParse(await resp.text());
+  if (linhas.length < 2) return [];
+
+  // ── Índices fixos baseados na estrutura real da planilha ──
+  // Col A(0)=SKU | B(1)=DESCRIÇÃO DO PRODUTO | C(2)=Descrição(tipo)
+  // D(3)=ESTOQUE TOTAL | E(4)=ESTOQUE COMPROMETIDO | F(5)=ESTOQUE DISPONÍVEL
+  // G(6) em diante = colunas de PEDIDOS (números de pedido)
+  const I_SKU  = 0;
+  const I_DESC = 1;
+  const I_TOT  = 3;
+  const I_COMP = 4;
+  const I_DISP = 5;
+  const I_PED_START = 6; // a partir daqui são colunas de pedidos
+
+  // Validação: tenta confirmar pelo cabeçalho, mas não bloqueia
+  const hdr = linhas[0].map(h => String(h || '').trim().toUpperCase());
+  console.log(`[${aba}] Cabeçalho (${hdr.length} cols):`, hdr.slice(0, 10).join(' | '));
+
+  const itens = [];
+  for (let r = 1; r < linhas.length; r++) {
+    const row = linhas[r];
+    const get = ix => (ix < row.length) ? String(row[ix] || '').trim() : '';
+
+    const sku = get(I_SKU);
+    if (!sku || sku === '0') continue;
+
+    // Coleta pedidos: colunas G em diante que tenham número
+    const pedidos = [];
+    for (let c = I_PED_START; c < row.length; c++) {
+      const v = get(c);
+      if (v && v !== '0' && /\d/.test(v)) pedidos.push(v);
+    }
+
+    itens.push({
+      sku,
+      desc:  get(I_DESC),
+      total: parseNum(get(I_TOT)),
+      comp:  parseNum(get(I_COMP)),
+      disp:  parseNum(get(I_DISP)),
+      pedidos
+    });
+  }
+  return itens;
+}
+
+async function carregarSheets() {
+  setDot('sheets', 'idle', 'Lendo planilha...');
+  try {
+    const [com, lic] = await Promise.all([
+      fetchAba('comercial').catch(e => { console.error('COMERCIAL:', e); return []; }),
+      fetchAba('licitacao').catch(e => { console.error('LICITAÇÃO:', e); return []; }),
+    ]);
+    dadosSheet.comercial = com;
+    dadosSheet.licitacao = lic;
+
+    setDot('sheets', 'ok', `Sheets OK · ${com.length} Comercial + ${lic.length} Licitação`);
+    document.getElementById('cnt-comercial').textContent = com.length;
+    document.getElementById('cnt-licitacao').textContent = lic.length;
+    toast(`Planilha carregada: ${com.length + lic.length} SKUs`, 'ok');
+  } catch (e) {
+    setDot('sheets', 'err', 'Falha ao ler planilha');
+    toast('Erro ao ler Google Sheets: ' + e.message, 'err');
+  }
+}
+
+/* ============================================================
+   OPs DO OMIE (igual ao calendário)
+   ============================================================ */
+function detectarLinha(desc) {
+  if (!desc) return 'LACTEO';
+  const d = desc.toUpperCase();
+  if (d.includes('CAFE') || d.includes('CAFÉ') || d.includes('BELVEDER') || d.includes('ALMOFADA') || d.includes('VACUO') || d.includes('TORRADO')) return 'CAFE';
+  if (d.includes('25KG') || d.includes('25 KG') || d.includes('SACARIA')) return 'SACARIA';
+  return 'LACTEO';
+}
+
+function mapSt(etapa) {
+  const v = String(etapa || '').toUpperCase();
+  if (v === '60' || v === 'E' || v.includes('ENCERR') || v.includes('CONCL')) return 'Encerrada';
+  if (v === 'A' || v.includes('ANDAMENTO')) return 'Em andamento';
+  return 'Pendente';
+}
+
+function cvDt(s) {
+  if (!s) return '';
+  s = String(s).trim();
+  if (s.includes('/')) { const p = s.split('/'); if (p.length === 3) return `${p[2]}-${p[1]}-${p[0]}`; }
+  return s.slice(0, 10);
+}
+
+function fmtDt(iso) {
+  if (!iso || iso.length < 8) return '—';
+  const p = iso.slice(0, 10).split('-');
+  return `${p[2]}/${p[1]}/${p[0]}`;
+}
+
+async function carregarOPs() {
+  setDot('omie', 'idle', 'Carregando OPs...');
+  OPS = [];
+
+  for (const emp of OMIE_KEYS) {
+    let pag = 1, totalPag = 1;
+    while (pag <= totalPag) {
+      try {
+        const data = await omieCall(EP_OP, 'ListarOrdemProducao', emp.key, emp.secret, [{
+          pagina: pag,
+          registros_por_pagina: 50,
+          apenas_importado_api: 'N',
+          ordenar_por: 'DATA_PREVISAO',
+          ordem_decrescente: 'N'
+        }]);
+        const lista = data.cadastros || [];
+        const corte = new Date(); corte.setDate(corte.getDate() - 180);
+
+        for (const op of lista) {
+          const ident = op.identificacao || {};
+          const infAd = op.infAdicionais || {};
+          const outras = op.outrasInf || {};
+          const obsObj = op.observacoes || {};
+          const concluida = String(outras.cConcluida || '').toUpperCase();
+          // Pula encerradas/concluídas
+          if (concluida === 'S') continue;
+
+          OPS.push({
+            id:          String(ident.nCodOP || ''),
+            op:          String(ident.cNumOP || ident.nCodOP || ''),
+            nCodProd:    String(ident.nCodProduto || ''),
+            codProd:     '...',
+            descProd:    '...',
+            plan:        parseFloat(ident.nQtde || 0),
+            real:        0,
+            dtPrev:      cvDt(ident.dDtPrevisao || ''),
+            status:      mapSt(infAd.cEtapa || ''),
+            empresa:     emp.nome,
+            _emp:        emp,
+            linha:       'LACTEO'
+          });
+        }
+
+        totalPag = data.total_de_paginas || 1;
+        const maisAntiga = lista.reduce((min, op) => {
+          const dt = new Date((op.identificacao || {}).dDtPrevisao || '2099-01-01');
+          return dt < min ? dt : min;
+        }, new Date());
+        if (maisAntiga < corte || lista.length < 50) break;
+        pag++;
+        await sleep(300);
+      } catch (e) {
+        console.error(emp.nome, 'pag', pag, e.message);
+        break;
+      }
+    }
+  }
+
+  // Enriquece produtos
+  await enrichProdutosOPs();
+
+  setDot('omie', 'ok', `OMIE OK · ${OPS.length} OPs abertas`);
+  document.getElementById('ops-info').textContent = `${OPS.length} OPs abertas`;
+  renderOPs();
+  recalcular();
+}
+
+async function enrichProdutosOPs() {
+  for (const emp of OMIE_KEYS) {
+    const opsEmp = OPS.filter(o => o.empresa === emp.nome);
+    if (!opsEmp.length) continue;
+
+    // cache: nCodProd (ID interno) -> { cod: SKU externo, desc }
+    const cache = {};
+    let pag = 1;
+    while (true) {
+      try {
+        const data = await omieCall(EP_PROD, 'ListarProdutos', emp.key, emp.secret, [{
+          pagina: pag, registros_por_pagina: 500, apenas_importado_api: 'N'
+        }]);
+        const lista = data.produto_servico_cadastro || data.produto_servico_resumido || [];
+        if (!lista.length) break;
+        for (const p of lista) {
+          // ID interno (nCodProd) — chave do cache
+          const idInt = String(p.codigo_produto || p.nCodProd || p.nCodigo || '').trim();
+          // Codigo externo (SKU) — o que aparece na planilha
+          const codExt = String(p.codigo || p.cCodigo || p.codigo_produto_integracao || '').trim();
+          const desc = String(p.descricao || p.cDescricao || p.descr_detalhada || '').trim() || '—';
+          if (idInt) cache[idInt] = { cod: codExt || idInt, desc };
+        }
+        const tot = data.total_de_registros || lista.length;
+        if (pag * 500 >= tot || lista.length < 500) break;
+        pag++;
+        await sleep(200);
+      } catch (e) {
+        console.error('[enrichProdutos]', emp.nome, e.message);
+        break;
+      }
+    }
+
+    console.log('[enrichProdutos]', emp.nome, Object.keys(cache).length, 'produtos no cache');
+
+    for (const op of opsEmp) {
+      const entry = cache[op.nCodProd];
+      if (entry && entry.cod) {
+        op.codProd  = entry.cod;   // SKU externo (igual à planilha)
+        op.descProd = entry.desc;
+        op.linha    = detectarLinha(entry.desc);
+      } else {
+        // Fallback: usa o nCodProd mesmo (ID interno) — o cruzamento
+        // vai tentar bater com o SKU da planilha se forem iguais
+        op.codProd  = op.nCodProd;
+        op.descProd = '(produto não encontrado)';
+        console.warn('[enrichProdutos] sem match para nCodProd:', op.nCodProd, '| OP:', op.op);
+      }
+    }
+
+    // Log dos matches para debug
+    const comMatch = opsEmp.filter(o => o.descProd !== '(produto não encontrado)').length;
+    console.log('[enrichProdutos]', emp.nome, comMatch + '/' + opsEmp.length, 'OPs com SKU resolvido');
+  }
+}
+
+/* ============================================================
+   CÁLCULO
+   ============================================================ */
+function recalcular() {
+  const sheet = dadosSheet[viewAtual] || [];
+
+  // Agrupa OPs por SKU — indexa por codProd E nCodProd
+  // para garantir match mesmo quando o enrich nao resolveu o codigo externo
+  const opsPorSku = {};
+  OPS.forEach(op => {
+    const keys = [...new Set([
+      String(op.codProd  || '').trim(),
+      String(op.nCodProd || '').trim()
+    ])];
+    keys.forEach(key => {
+      if (!key || key === '...' || key === '') return;
+      if (!opsPorSku[key]) opsPorSku[key] = { qtd: 0, ops: [] };
+      // Evita duplicar a mesma OP se codProd === nCodProd
+      if (!opsPorSku[key].ops.find(o => o.id === op.id)) {
+        opsPorSku[key].qtd += op.plan;
+        opsPorSku[key].ops.push(op);
+      }
+    });
+  });
+
+  dadosCalc = sheet.map(item => {
+    const opsItem = opsPorSku[item.sku] || { qtd: 0, ops: [] };
+    const dispReal = item.disp !== 0 ? item.disp : (item.total - item.comp);
+    let status = 'ok';
+    if (dispReal < 0) status = 'zero';
+    else if (dispReal < item.comp * 0.3 && item.comp > 0) status = 'baixo';
+
+    return {
+      ...item,
+      dispReal,
+      emProducao: opsItem.qtd,
+      ops: opsItem.ops,
+      status
+    };
+  }).sort((a, b) => {
+    const ord = { zero: 0, baixo: 1, ok: 2 };
+    if (ord[a.status] !== ord[b.status]) return ord[a.status] - ord[b.status];
+    return a.desc.localeCompare(b.desc);
+  });
+
+  atualizarKPIs();
+  aplicarFiltros();
+}
+
+function atualizarKPIs() {
+  const total = dadosCalc.length;
+  const estoqueTotal = dadosCalc.reduce((s, d) => s + d.total, 0);
+  const totalOPs = OPS.reduce((s, o) => s + o.plan, 0);
+  const neg = dadosCalc.filter(d => d.dispReal < 0).length;
+
+  document.getElementById('kpi-skus').textContent    = total;
+  document.getElementById('kpi-estoque').textContent = fmt(estoqueTotal);
+  document.getElementById('kpi-ops').textContent     = fmt(totalOPs) + ' kg';
+  document.getElementById('kpi-neg').textContent     = neg;
+
+  // Atualiza cor dos KPIs
+  document.querySelector('#kpi-neg').closest('.kpi').className = 'kpi ' + (neg > 0 ? 'danger' : 'ok');
+}
+
+/* ============================================================
+   FILTROS + RENDER TABELA
+   ============================================================ */
+function aplicarFiltros() {
+  const fStat  = document.getElementById('f-status').value;
+  const fBusca = document.getElementById('f-busca').value.trim().toLowerCase();
+
+  const filtrado = dadosCalc.filter(d => {
+    if (fStat && d.status !== fStat) return false;
+    if (fBusca && !(d.sku + ' ' + d.desc).toLowerCase().includes(fBusca)) return false;
+    return true;
+  });
+
+  renderTabela(filtrado);
+
+  const nomeView = { comercial: 'Comercial', licitacao: 'Licitação' };
+  document.getElementById('tabela-titulo').textContent = `Estoque — ${nomeView[viewAtual]}`;
+  document.getElementById('tabela-info').textContent   = `${filtrado.length} de ${dadosCalc.length} SKUs`;
+}
+
+function renderTabela(dados) {
+  const tbody = document.getElementById('tbody-estoque');
+  if (!dados.length) {
+    tbody.innerHTML = '<tr><td colspan="8"><div class="vazio"><div class="vazio-icon">📦</div>Nenhum SKU encontrado.</div></td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = dados.map(d => {
+    const dispCls = d.status === 'zero' ? 'disp-zero' : d.status === 'baixo' ? 'disp-baixo' : 'disp-ok';
+    const statusHtml = d.status === 'zero'
+      ? '<span class="status-pill s-zero">✗ Negativo</span>'
+      : d.status === 'baixo'
+        ? '<span class="status-pill s-baixo">⚠ Baixo</span>'
+        : '<span class="status-pill s-ok">✓ OK</span>';
+
+    const nPed = d.pedidos.length;
+    const pedHtml = nPed > 0
+      ? `<span class="ped-badge has-ped" title="${d.pedidos.join(', ')}">${nPed}</span>`
+      : `<span class="ped-badge">—</span>`;
+
+    const opHtml = d.emProducao > 0
+      ? `<span class="op-badge">+${fmt(d.emProducao)} kg · ${d.ops.length} OP${d.ops.length > 1 ? 's' : ''}</span>`
+      : '<span style="color:var(--muted);">—</span>';
+
+    return `<tr onclick="abrirDrill('${d.sku}')">
+      <td class="cod">${d.sku}</td>
+      <td class="produto">${d.desc || '—'}</td>
+      <td class="num">${fmt(d.total)}</td>
+      <td class="num" style="color:${d.comp > 0 ? 'var(--amber)' : 'var(--muted)'};font-weight:${d.comp > 0 ? 700 : 400};">${fmt(d.comp)}</td>
+      <td class="num qtd-disp ${dispCls}">${fmt(d.dispReal)}</td>
+      <td class="center">${pedHtml}</td>
+      <td class="num">${opHtml}</td>
+      <td class="center">${statusHtml}</td>
+    </tr>`;
+  }).join('');
+}
+
+/* ============================================================
+   RENDER OPs
+   ============================================================ */
+function renderOPs() {
+  const grid = document.getElementById('ops-grid');
+  if (!OPS.length) {
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:24px;color:var(--muted);font-size:12px;">Nenhuma OP aberta encontrada no OMIE.</div>';
+    return;
+  }
+
+  const LINHA_COR = { LACTEO: '#1d6fa3', SACARIA: '#6a3fbf', CAFE: '#8c4a1a' };
+
+  grid.innerHTML = OPS.slice(0, 30).map(op => {
+    const cor = LINHA_COR[op.linha] || '#1A2B4A';
+    const stCls = { 'Pendente': 'pendente', 'Em andamento': 'andamento', 'Encerrada': 'encerrada' }[op.status] || 'pendente';
+
+    return `<div class="op-card">
+      <div class="op-card-top">
+        <span class="op-num" style="color:${cor};">OP ${op.op} · ${op.empresa}</span>
+        <span class="op-st ${stCls}">${op.status}</span>
+      </div>
+      <div class="op-desc">${op.codProd !== '...' ? op.codProd + ' · ' : ''}${op.descProd}</div>
+      <div class="op-nums">
+        <span class="op-num-val">Plan: <strong>${fmt(op.plan)} kg</strong></span>
+        ${op.dtPrev ? `<span class="op-num-val" style="margin-left:auto;">Prev: <strong>${fmtDt(op.dtPrev)}</strong></span>` : ''}
+      </div>
+      <div class="op-bar-bg"><div class="op-bar-fill" style="width:0%;background:${cor};"></div></div>
+    </div>`;
+  }).join('');
+
+  if (OPS.length > 30) {
+    grid.innerHTML += `<div style="grid-column:1/-1;text-align:center;padding:12px;color:var(--muted);font-size:11px;">+ ${OPS.length - 30} OPs não exibidas. Exporte o Excel para ver todas.</div>`;
+  }
+}
+
+/* ============================================================
+   DRILL-DOWN
+   ============================================================ */
+function abrirDrill(sku) {
+  const d = dadosCalc.find(x => x.sku === sku);
+  if (!d) return;
+
+  document.getElementById('drill-titulo').textContent = d.desc || sku;
+  document.getElementById('drill-sub').textContent    = `SKU ${d.sku} · Aba: ${SHEETS_ABAS[viewAtual]}`;
+  document.getElementById('drill-estq').textContent  = fmt(d.total);
+  document.getElementById('drill-comp').textContent  = fmt(d.comp);
+
+  const dispEl = document.getElementById('drill-disp');
+  dispEl.textContent = fmt(d.dispReal);
+  dispEl.style.color = d.dispReal < 0 ? 'var(--red)' : d.dispReal < d.comp * 0.3 ? 'var(--amber)' : 'var(--green)';
+
+  const tb = document.getElementById('drill-tbody');
+  if (!d.pedidos.length && !d.ops.length) {
+    tb.innerHTML = '<tr><td colspan="2" style="text-align:center;padding:16px;color:var(--muted);">Nenhum pedido ou OP vinculado.</td></tr>';
+  } else {
+    const pedRows = d.pedidos.map(p => `<tr><td style="font-family:monospace;font-weight:700;">${p}</td><td>Pedido vinculado (planilha)</td></tr>`).join('');
+    const opRows  = d.ops.map(op => `<tr><td style="font-family:monospace;font-weight:700;color:var(--blue);">OP ${op.op}</td><td>${op.empresa} · ${fmt(op.plan)} kg · Prev. ${fmtDt(op.dtPrev)}</td></tr>`).join('');
+    tb.innerHTML = pedRows + opRows;
+  }
+
+  document.getElementById('drill-modal').classList.add('open');
+}
+function fecharDrill() { document.getElementById('drill-modal').classList.remove('open'); }
+
+/* ============================================================
+   AÇÕES
+   ============================================================ */
+function trocarView(v) {
+  viewAtual = v;
+  document.querySelectorAll('.view-tab').forEach(b => b.classList.toggle('active', b.dataset.view === v));
+  document.getElementById('f-busca').value  = '';
+  document.getElementById('f-status').value = '';
+  recalcular();
+}
+
+async function atualizar() {
+  toast('Atualizando planilha e OPs...', 'info');
+  await Promise.all([carregarSheets(), carregarOPs()]);
+  recalcular();
+}
+
+function exportarExcel() {
+  if (!window.XLSX) { toast('Aguarde...', 'info'); return; }
+  const fBusca = document.getElementById('f-busca').value.trim().toLowerCase();
+  const fStat  = document.getElementById('f-status').value;
+  const dados  = dadosCalc.filter(d => {
+    if (fStat && d.status !== fStat) return false;
+    if (fBusca && !(d.sku + ' ' + d.desc).toLowerCase().includes(fBusca)) return false;
+    return true;
+  });
+
+  const wb  = XLSX.utils.book_new();
+  const aoa = [
+    [`ESTOQUE ${viewAtual.toUpperCase()} — ${new Date().toLocaleDateString('pt-BR')}`],
+    [],
+    ['SKU', 'Descrição', 'Estoque Total', 'Comprometido', 'Disponível', 'Em Produção (kg)', 'Qtd OPs', 'Pedidos', 'Status']
+  ];
+  dados.forEach(d => aoa.push([
+    d.sku, d.desc, d.total, d.comp, d.dispReal,
+    d.emProducao, d.ops.length, d.pedidos.join(', '),
+    d.status === 'zero' ? 'NEGATIVO' : d.status === 'baixo' ? 'BAIXO' : 'OK'
+  ]));
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{ wch: 12 }, { wch: 46 }, { wch: 13 }, { wch: 13 }, { wch: 12 }, { wch: 16 }, { wch: 9 }, { wch: 28 }, { wch: 10 }];
+  XLSX.utils.book_append_sheet(wb, ws, viewAtual.toUpperCase());
+  XLSX.writeFile(wb, `Estoque_${viewAtual}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  toast('Excel exportado!', 'ok');
+}
+
+/* ============================================================
+   UTILS
+   ============================================================ */
+function fmt(n) { return Number(n || 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 }); }
+
+function setDot(id, state, txt) {
+  const dot = document.getElementById(id + '-dot');
+  const st  = document.getElementById(id + '-status');
+  if (dot) dot.className = 'sb-dot ' + (state === 'ok' ? 'ok' : state === 'err' ? 'err' : 'idle');
+  if (st)  st.textContent = txt;
+}
+
+function toast(msg, tipo) {
+  const cont = document.getElementById('toast');
+  const el   = document.createElement('div');
+  el.className = 'toast-item toast-' + (tipo === 'ok' ? 'ok' : tipo === 'err' ? 'err' : 'info');
+  el.textContent = msg;
+  cont.appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+
+document.getElementById('drill-modal').addEventListener('click', e => {
+  if (e.target.id === 'drill-modal') fecharDrill();
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') fecharDrill(); });
+
+/* ============================================================
+   INIT
+   ============================================================ */
+(async function init() {
+  await carregarSheets();
+  recalcular();
+  carregarOPs(); // não bloqueia — atualiza quando chegar
+})();
+</script>
+</body>
+</html>
