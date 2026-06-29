@@ -2,12 +2,14 @@
   publish = "."
   functions = "netlify/functions"
 
-[functions]
-  timeout = 26
-
 [[redirects]]
   from = "/api/admin-limpar-rotas"
   to = "/.netlify/functions/admin-limpar-rotas"
+  status = 200
+
+[[redirects]]
+  from = "/api/debug-faturamento"
+  to = "/.netlify/functions/debug-faturamento"
   status = 200
 
 [[redirects]]
@@ -35,8 +37,3 @@
   [headers.values]
     X-Frame-Options = "DENY"
     X-Content-Type-Options = "nosniff"
-
-[[redirects]]
-  from = "/api/debug-faturamento"
-  to = "/.netlify/functions/debug-faturamento"
-  status = 200
