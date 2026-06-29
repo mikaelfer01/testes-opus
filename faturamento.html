@@ -790,7 +790,7 @@ window.executarFaturarTodos = async function() {
 async function executarFaturamento(p) {
   const empresa = resolverEmpresa(p);
   const codigoPedido = parseInt(p._codigo_pedido || p.codigo_pedido);
-  if (!codigoPedido) throw new Error('Pedido sem código Omie');
+  if (!codigoPedido || isNaN(codigoPedido)) throw new Error('Pedido sem código Omie válido');
 
   // 1. Fatura o pedido de venda no Omie
   const resultFat = await omieCall(empresa,
@@ -799,33 +799,52 @@ async function executarFaturamento(p) {
     [{ codigo_pedido: codigoPedido, documento: { serie: '1' } }]
   );
 
-  // 2. Aguarda processamento e consulta a NF gerada
-  await sleep(2000);
+  // Extrai código NF direto do response de faturamento (vários campos possíveis)
+  let nfCod = resultFat.codigo_nf
+    || resultFat.codigo_nf_omie
+    || resultFat.nfCodigo
+    || null;
+
+  let numero_nf_fat = String(resultFat.numero_nf || resultFat.nNF || '');
+  let serie_fat     = String(resultFat.serie || resultFat.ide?.serie || '1');
+  let chave_fat     = resultFat.chNFe || resultFat.chave_nfe || resultFat.chave_nf || '';
+
+  // 2. Aguarda processamento e consulta o pedido para pegar código NF se não veio no step 1
+  await sleep(3000);
   const resultPed = await omieCall(empresa,
     'https://app.omie.com.br/api/v1/produtos/pedido/',
     'ConsultarPedido',
     [{ codigo_pedido: codigoPedido }]
   );
 
-  const cab = resultPed.cabecalho || {};
-  const nfCod = cab.codigo_nf || resultFat.codigo_nf || null;
+  const cab   = resultPed.cabecalho || resultPed.pedido_venda_produto?.cabecalho || {};
+  const infNF = resultPed.informacoes_adicionais || {};
+  nfCod = nfCod || cab.codigo_nf || cab.codigo_nf_omie || null;
 
-  let numero_nf = '—', serie = '1', chave_nf = '', status_nf = 'pendente';
+  let numero_nf = numero_nf_fat || cab.numero_nf || '—';
+  let serie     = serie_fat || cab.serie_nf || '1';
+  let chave_nf  = chave_fat;
+  let status_nf = 'emitida';
 
   if (nfCod) {
-    // 3. Consulta detalhes da NF-e
+    // 3. Consulta NF-e pelo código interno Omie para pegar chave/número definitivos
     try {
+      await sleep(1500);
       const resultNF = await omieCall(empresa,
         'https://app.omie.com.br/api/v1/produtos/nf/',
         'ConsultarNF',
         [{ codigo_nf_omie: nfCod }]
       );
-      const infNF = resultNF.infNFe || resultNF.compl || {};
-      numero_nf = resultNF.ide?.nNF || resultNF.numero_nf || nfCod;
-      serie     = resultNF.ide?.serie || '1';
-      chave_nf  = resultNF.protNFe?.infProt?.chNFe || resultNF.chave_nfe || '';
-      status_nf = resultNF.status || 'emitida';
-    } catch { /* usa defaults */ }
+      // Omie retorna cabecalho com numero_nf, chaveNFe separado
+      const cabNF = resultNF.cabecalho || resultNF.nfCabecalho || {};
+      numero_nf = cabNF.numero_nf || cabNF.nNF || resultNF.numero_nf || numero_nf;
+      serie     = cabNF.serie || cabNF.serie_nf || serie;
+      chave_nf  = resultNF.chaveNFe || resultNF.chave_nfe || resultNF.protNFe?.infProt?.chNFe
+                  || cabNF.chave_nfe || chave_nf;
+      status_nf = resultNF.status_nfe || resultNF.status || 'emitida';
+    } catch(eNF) {
+      // Segue com os dados que já temos do FaturarPedidoVenda/ConsultarPedido
+    }
   }
 
   // Registra lote/fabricação/validade dos itens separados para rastreabilidade da NF-e
@@ -842,7 +861,8 @@ async function executarFaturamento(p) {
     empresa,
     rastreabilidade,
     emitida_em: Date.now(),
-    emitida_por: usuario?.nome || '—'
+    emitida_por: usuario?.nome || '—',
+    _debug_fat: { nfCod, resultFat_keys: Object.keys(resultFat||{}), cab_keys: Object.keys(cab||{}) }
   };
 }
 
