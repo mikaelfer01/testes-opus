@@ -2,6 +2,26 @@
   publish = "."
   functions = "netlify/functions"
 
+[[redirects]]
+  from = "/api/omie"
+  to = "/.netlify/functions/omie"
+  status = 200
+
+[[redirects]]
+  from = "/api/omie-seguro"
+  to = "/.netlify/functions/omie-seguro"
+  status = 200
+
+[[redirects]]
+  from = "/api/firebase-read"
+  to = "/.netlify/functions/firebase-read"
+  status = 200
+
+[[redirects]]
+  from = "/api/firebase-write"
+  to = "/.netlify/functions/firebase-write"
+  status = 200
+
 [[headers]]
   for = "/*"
   [headers.values]

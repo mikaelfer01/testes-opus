@@ -1,21 +1,21 @@
 const DATABASE_URL = 'https://mfparis-bd054-default-rtdb.firebaseio.com';
 const DB_SECRET = 'XCLrY4sIS8xul6sIgYAro1UpfnuXPFCJvXsQ4Cum';
 
-export default async (request) => {
+exports.handler = async (event) => {
   const headers = {
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Content-Type': 'application/json',
   };
 
-  if (request.method === 'OPTIONS') return new Response('', { status: 200, headers });
-  if (request.method !== 'POST') return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405, headers });
+  if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers, body: '' };
+  if (event.httpMethod !== 'POST') return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
 
   try {
-    const body = await request.json();
+    const body = JSON.parse(event.body || '{}');
     const { path, data, method } = body;
-    if (!path) return new Response(JSON.stringify({ error: 'path obrigatorio' }), { status: 400, headers });
+    if (!path) return { statusCode: 400, headers, body: JSON.stringify({ error: 'path obrigatorio' }) };
 
     const url = `${DATABASE_URL}/${path}.json?auth=${DB_SECRET}`;
     let fetchMethod = 'PUT';
@@ -28,13 +28,11 @@ export default async (request) => {
     const firebaseResp = await fetch(url, fetchOptions);
     if (!firebaseResp.ok) {
       const txt = await firebaseResp.text();
-      return new Response(JSON.stringify({ error: 'Firebase erro: ' + txt }), { status: 500, headers });
+      return { statusCode: 500, headers, body: JSON.stringify({ error: 'Firebase erro: ' + txt }) };
     }
     const result = await firebaseResp.json();
-    return new Response(JSON.stringify({ ok: true, result }), { status: 200, headers });
+    return { statusCode: 200, headers, body: JSON.stringify({ ok: true, result }) };
   } catch (e) {
-    return new Response(JSON.stringify({ error: e.message }), { status: 500, headers });
+    return { statusCode: 500, headers, body: JSON.stringify({ error: e.message }) };
   }
 };
-
-export const config = { path: '/api/firebase-write' };
