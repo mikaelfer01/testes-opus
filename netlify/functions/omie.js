@@ -53,4 +53,4 @@ export default async (request, context) => {
   }
 };
 
-export const config = { path: '/netlify/functions/omie' };
+export const config = { path: '/api/omie' };
