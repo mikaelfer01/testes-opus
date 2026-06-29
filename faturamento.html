@@ -133,6 +133,9 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--i
 .btn-fat:active{transform:scale(.97)}
 .btn-fat:disabled{background:#cbd5e1;color:#64748b;cursor:not-allowed}
 .btn-fat-outline{flex:1;padding:10px;border-radius:10px;border:1px solid var(--border);background:#fff;color:var(--ink2);font-family:inherit;font-weight:700;font-size:12px;cursor:pointer}
+.btn-dev-cart{flex:1;padding:10px;border-radius:10px;border:1px solid rgba(220,38,38,.3);background:var(--err-bg);color:#991b1b;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer}
+.btn-dev-cart:active{transform:scale(.97)}
+.erro-fat{background:var(--err-bg);border:1px solid rgba(220,38,38,.3);border-radius:8px;padding:9px 12px;margin-top:8px;font-size:11.5px;color:#991b1b;line-height:1.5}
 
 /* FOOTER */
 .footer{flex-shrink:0;background:#fff;border-top:1px solid var(--border);padding:10px 14px;box-shadow:0 -4px 12px rgba(0,0,0,.06);display:flex;gap:8px}
@@ -303,7 +306,7 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--i
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import { getDatabase, ref, onValue, update, set } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+import { getDatabase, ref, onValue, update, set, get } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
 const FB_CFG = {
   apiKey:"AIzaSyAch7_Sn4jq1cuTGV1ijGsDGUXC9dyilOs",
@@ -417,12 +420,11 @@ function renderLista() {
   document.getElementById('hdr-t2').textContent = 'Rotas aguardando faturamento';
   dtAtual = null;
 
-  // Entra em faturamento assim que a separação é confirmada (statusFluxo 'separado' ou posterior)
-  const STATUS_POS_SEP = ['separado','em_carregamento','carregado','despachado','em_transito'];
+  // Faturamento disponível somente para rotas com separação confirmada (statusFluxo === 'separado')
   const filtros = {
-    aguardando: dt => STATUS_POS_SEP.includes(dt.statusFluxo) && !dt.faturamento?.status,
-    faturando:  dt => dt.faturamento?.status === 'faturando',
-    faturado:   dt => dt.faturamento?.status === 'faturado',
+    aguardando: dt => dt.statusFluxo === 'separado' && !dt.faturamento?.status,
+    faturando:  dt => dt.statusFluxo === 'separado' && dt.faturamento?.status === 'faturando',
+    faturado:   dt => dt.statusFluxo === 'separado' && dt.faturamento?.status === 'faturado',
   };
 
   const lista = Object.entries(DTS)
@@ -440,7 +442,7 @@ function renderLista() {
   const cont = document.getElementById('lista-content');
   if (!lista.length) {
     const msgs = {
-      aguardando: 'Nenhuma rota aguardando faturamento.<br><small>Rotas aparecem aqui após confirmação do carregamento.</small>',
+      aguardando: 'Nenhuma rota aguardando faturamento.<br><small>Rotas aparecem aqui após a confirmação da separação.</small>',
       faturando: 'Nenhuma rota em processamento.',
       faturado: 'Nenhuma rota faturada ainda.',
     };
@@ -514,12 +516,25 @@ function classificarPedido(p) {
 }
 
 function montarItensComRastro(p, rastros) {
-  const itens = p.itens && p.itens.length ? p.itens : [];
+  // Suporta paradas com array itens[] e paradas com campos sku/produto/peso diretos
+  const itens = (p.itens && p.itens.length)
+    ? p.itens
+    : (p.sku ? [{ sku: p.sku, descricao: p.produto || p.descricao || '—', quantidade: p.peso || p.qtd || 0 }] : []);
   return itens.map((it, j) => {
     const r = rastros[j] || {};
     const rastreado = !!(r.lote || r.val);
     return { ...it, lote: r.lote || '', fab: r.fab || '', val: r.val || '', rastreado, estoqueOk: rastreado };
   });
+}
+
+// Resolve o nome canônico da empresa para busca em CREDENCIAIS
+function resolverEmpresa(p) {
+  const raw = p._empresa || p.empresa || p._emp_key || 'MF Paris';
+  if (CREDENCIAIS[raw]) return raw;
+  const up = raw.toUpperCase();
+  if (up.includes('DMS')) return 'DMS';
+  if (up.includes('PROFI') || up === 'PRF') return 'Profi';
+  return 'MF Paris';
 }
 
 function renderDetalheCabecalho(token) {
@@ -560,7 +575,7 @@ function renderDetalhe(token) {
       <div class="ped-h" onclick="togglePed(${i})">
         <div class="ped-num">#${p.pedido||p.numero_pedido||'—'}</div>
         <div class="ped-emp">${empresa}</div>
-        <div class="ped-tipo ${p._classificacao.tipo}">${p._classificacao.label}</div>
+        <div class="ped-tipo ${(p._classificacao||{}).tipo||'venda'}">${(p._classificacao||{}).label||'💰 Venda'}</div>
         <div class="ped-cli">
           <div class="ped-cli-n">${p.cliente||p.cliente_nome||'—'}</div>
           <div class="ped-cli-c">${p.cidade||p.cliente_cidade||'—'} · ${fmtMoeda(p.valor_total)}</div>
@@ -594,11 +609,11 @@ function renderDetalhe(token) {
         ${lotesNf ? `<div class="nf-detalhe" style="margin-top:4px;font-size:10.5px">${lotesNf}</div>` : ''}
       </div>`;
     } else if (!isFaturado) {
+      const erroFat = p._erroFaturamento ? `<div class="erro-fat">❌ Erro Omie: ${p._erroFaturamento}</div>` : '';
       html += `<div class="ped-acoes">
-        <button class="btn-fat" onclick="faturarPedido(${i})" ${estSt==='loading'?'disabled':''}>
-          🧾 Faturar este pedido
-        </button>
-      </div>`;
+        <button class="btn-fat" onclick="faturarPedido(${i})">🧾 Faturar</button>
+        <button class="btn-dev-cart" onclick="devolverPedidoCarteira(${i})">↩ Devolver</button>
+      </div>${erroFat}`;
     }
 
     html += '</div></div>';
@@ -619,6 +634,58 @@ function renderDetalhe(token) {
   }
   document.getElementById('det-footer').innerHTML = footerHtml;
 }
+
+// ── DEVOLVER PEDIDO PARA CARTEIRA ────────────────────────────────────────────
+window.devolverPedidoCarteira = async function(i) {
+  const p = pedidosDetalhe[i];
+  if (!p) return;
+  const numPed = p.pedido || p.numero_pedido || ('Pedido ' + (i+1));
+  if (!confirm(`Devolver pedido #${numPed} para a carteira?\n\nEle sairá desta rota e voltará à fila de pedidos para ser roteado novamente.`)) return;
+
+  loading('Devolvendo pedido #' + numPed + '...');
+  try {
+    // Lê carteira atual e adiciona o pedido de volta
+    const snap = await get(ref(db, 'carteira_envio/pedidos'));
+    const existente = snap.val();
+    const lista = Array.isArray(existente) ? existente : (existente ? Object.values(existente) : []);
+    lista.push({
+      empresa:        resolverEmpresa(p),
+      numero_pedido:  p.pedido || p.numero_pedido || '',
+      codigo_pedido:  p._codigo_pedido || p.codigo_pedido || '',
+      codigo_cliente: p.codigo_cliente || '',
+      cliente_nome:   p.cliente || p.cliente_nome || '',
+      cliente_cidade: p.cidade || p.cliente_cidade || '',
+      cliente_uf:     p.estado || p.cliente_uf || '',
+      cliente_cep:    p.cep || '',
+      cliente_end:    p.endereco || '',
+      valor_total:    p.valor_total || 0,
+      peso_total:     p.peso || p.peso_total || 0,
+      frete:          p.frete || 'CIF',
+      departamento:   p.segmento === 'LICITACAO' ? 'Licitação' : 'Comercial',
+      itens:          p.itens || [],
+      observacoes:    p._obs_atual || p.observacoes || '',
+      _devolvido_faturamento: true,
+      _devolvido_em: Date.now(),
+    });
+    await fbSet('carteira_envio/pedidos', lista);
+
+    // Remove o pedido das paradas do DT (marca como devolvido no despacho)
+    const dt = DTS[dtAtual] || {};
+    const paradasAtuais = dt.paradas || [];
+    const novasParadas = paradasAtuais.filter((_, idx) => idx !== i);
+    await fbSet('despachos/' + dtAtual + '/paradas', novasParadas.length ? novasParadas : null);
+
+    toast('✅ Pedido #' + numPed + ' devolvido à carteira!', 'ok');
+    // Se não sobrou nenhuma parada, volta para lista
+    if (!novasParadas.length) {
+      setTimeout(() => { dtAtual = null; renderLista(); }, 1200);
+    }
+  } catch(e) {
+    toast('❌ Erro ao devolver: ' + e.message, 'err');
+  } finally {
+    esconderLoading();
+  }
+};
 
 window.togglePed = function(i) {
   const card = document.getElementById('ped-card-' + i);
@@ -643,6 +710,8 @@ window.faturarPedido = async function(i) {
     });
     toast('✅ NF-e ' + nfInfo.numero_nf + ' emitida!', 'ok');
   } catch(e) {
+    pedidosDetalhe[i]._erroFaturamento = e.message;
+    renderDetalhe(dtAtual);
     toast('❌ ' + e.message, 'err');
   } finally {
     esconderLoading();
@@ -718,7 +787,7 @@ window.executarFaturarTodos = async function() {
 
 // ── FATURAMENTO VIA API OMIE ──────────────────────────────────────────────────
 async function executarFaturamento(p) {
-  const empresa = p._empresa || p.empresa || 'MF Paris';
+  const empresa = resolverEmpresa(p);
   const codigoPedido = parseInt(p._codigo_pedido || p.codigo_pedido);
   if (!codigoPedido) throw new Error('Pedido sem código Omie');
 
