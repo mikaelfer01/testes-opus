@@ -3,173 +3,264 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>OPUS — Limpar Pedido do Firebase</title>
+<title>OPUS — Limpar Pedido</title>
 <style>
   body{font-family:'Inter',system-ui,sans-serif;background:#050912;color:#e8eaf3;margin:0;padding:24px;min-height:100vh}
   h1{color:#e8c96a;font-size:18px;margin-bottom:4px}
   .sub{color:#7a8fa8;font-size:12px;margin-bottom:24px}
   .card{background:rgba(13,31,60,.8);border:1px solid rgba(184,144,42,.2);border-radius:12px;padding:20px;margin-bottom:16px;max-width:680px}
-  .card h2{font-size:13px;color:#e8c96a;margin:0 0 12px;text-transform:uppercase;letter-spacing:.08em}
-  .row{display:flex;gap:10px;align-items:center;margin-bottom:10px}
-  input{background:rgba(255,255,255,.06);border:1px solid rgba(184,144,42,.3);border-radius:8px;padding:9px 12px;color:#fff;font-size:14px;font-family:inherit;outline:none;width:180px}
+  .card h2{font-size:12px;color:#e8c96a;margin:0 0 12px;text-transform:uppercase;letter-spacing:.08em}
+  .row{display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap}
+  input{background:rgba(255,255,255,.06);border:1px solid rgba(184,144,42,.3);border-radius:8px;padding:9px 12px;color:#fff;font-size:14px;font-family:inherit;outline:none;width:200px}
   input:focus{border-color:#e8c96a}
-  button{background:linear-gradient(135deg,#e8c96a,#b8902a);color:#0a1728;border:none;border-radius:8px;padding:9px 18px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit}
-  button.danger{background:linear-gradient(135deg,#dc2626,#991b1b);color:#fff}
+  button{border:none;border-radius:8px;padding:9px 18px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit}
+  .btn-buscar{background:linear-gradient(135deg,#e8c96a,#b8902a);color:#0a1728}
+  .btn-limpar{background:linear-gradient(135deg,#dc2626,#991b1b);color:#fff}
+  .btn-devolver{background:linear-gradient(135deg,#16a34a,#15803d);color:#fff}
   button:disabled{opacity:.4;cursor:not-allowed}
-  .log{background:rgba(0,0,0,.4);border-radius:8px;padding:14px;font-size:12px;font-family:monospace;line-height:1.7;min-height:120px;max-height:400px;overflow-y:auto;white-space:pre-wrap;word-break:break-all}
-  .ok{color:#4ade80}.err{color:#f87171}.warn{color:#fbbf24}.info{color:#60a5fa}
-  .badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;margin-left:6px}
-  .found{background:rgba(220,38,38,.2);color:#f87171}
-  .not-found{background:rgba(22,163,74,.2);color:#4ade80}
+  .log{background:rgba(0,0,0,.4);border-radius:8px;padding:14px;font-size:12px;font-family:monospace;line-height:1.8;min-height:80px;max-height:320px;overflow-y:auto;white-space:pre-wrap;word-break:break-all}
+  .divider{border:none;border-top:1px solid rgba(184,144,42,.2);margin:8px 0 16px}
 </style>
 </head>
 <body>
 
-<h1>🔧 OPUS — Limpar Pedido do Firebase</h1>
-<p class="sub">Remove um pedido específico de despachos (roteirização, separação, carregamento, faturamento) e da carteira.</p>
+<h1>🔧 OPUS — Ferramentas de Limpeza</h1>
+<p class="sub">Utilitários admin para corrigir rotas e pedidos no Firebase.</p>
 
+<!-- SEÇÃO 1: Limpar pedido de despachos (sem mexer na carteira) -->
 <div class="card">
-  <h2>Pedido a limpar</h2>
+  <h2>Limpar pedido dos despachos</h2>
+  <p style="font-size:11px;color:#7a8fa8;margin:0 0 12px">Remove o pedido de roteirização / separação / carregamento / faturamento. A carteira não é alterada.</p>
   <div class="row">
-    <input type="text" id="inp-pedido" placeholder="Nº pedido (ex: 11805)" value="11805">
-    <button onclick="buscarPedido()">🔍 Buscar</button>
-    <button class="danger" id="btn-limpar" onclick="limparPedido()" disabled>🗑 Remover de tudo</button>
+    <input type="text" id="inp-ped" placeholder="Nº pedido (ex: 11805)">
+    <button class="btn-buscar" onclick="buscarPedido()">🔍 Buscar</button>
+    <button class="btn-limpar" id="btn-rm-ped" onclick="removerPedido()" disabled>🗑 Remover dos despachos</button>
   </div>
+  <div class="log" id="log-ped">Pronto.</div>
 </div>
 
+<!-- SEÇÃO 2: Deletar rota inteira e devolver pedidos à carteira -->
 <div class="card">
-  <h2>Log de operações</h2>
-  <div class="log" id="log">Aguardando...</div>
+  <h2>Deletar rota e devolver à carteira</h2>
+  <p style="font-size:11px;color:#7a8fa8;margin:0 0 12px">Apaga a rota inteira do Firebase e devolve todos os pedidos da rota para a carteira.</p>
+  <div class="row">
+    <input type="text" id="inp-rota" placeholder="Token ou nome da rota (ex: ABC1234)">
+    <button class="btn-buscar" onclick="buscarRota()">🔍 Buscar</button>
+    <button class="btn-devolver" id="btn-devolver" onclick="deletarRotaDevolver()" disabled>↩ Deletar rota e devolver</button>
+  </div>
+  <div class="log" id="log-rota">Pronto.</div>
 </div>
 
-<script type="module">
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import { getDatabase, ref, get, set, remove, update } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
-
-const FB = {
-  apiKey: "AIzaSyAch7_Sn4jq1cuTGV1ijGsDGUXC9dyilOs",
-  authDomain: "mfparis-bd054.firebaseapp.com",
-  databaseURL: "https://mfparis-bd054-default-rtdb.firebaseio.com",
-  projectId: "mfparis-bd054",
-};
-const app = initializeApp(FB);
-const db  = getDatabase(app);
-
-const logEl = document.getElementById('log');
-const btnLimpar = document.getElementById('btn-limpar');
-
-let achados = []; // lista de { tipo, path, descricao, acao }
-
-function log(msg, cls='') {
-  logEl.textContent += (logEl.textContent === 'Aguardando...' ? '' : '\n') + msg;
-  if (cls) {
-    const span = document.createElement('span');
-    span.className = cls;
-    span.textContent = msg;
-    logEl.innerHTML = logEl.innerHTML.replace(/Aguardando\.\.\./, '') + '\n';
-    logEl.appendChild(span);
-  }
-  logEl.scrollTop = logEl.scrollHeight;
+<script>
+// ── Helpers Firebase via Netlify proxy ──────────────────────────────────────
+async function fbRead(path) {
+  const r = await fetch('/api/firebase-read', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path })
+  });
+  if (!r.ok) throw new Error('Leitura falhou: HTTP ' + r.status);
+  return r.json();
 }
 
-function clearLog() { logEl.textContent = ''; }
+async function fbWrite(path, data) {
+  const r = await fetch('/api/firebase-write', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path, data, method: 'set' })
+  });
+  if (!r.ok) throw new Error('Escrita falhou: HTTP ' + r.status);
+  return r.json();
+}
+
+async function fbRemove(path) {
+  const r = await fetch('/api/firebase-write', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path, method: 'remove' })
+  });
+  if (!r.ok) throw new Error('Remoção falhou: HTTP ' + r.status);
+  return r.json();
+}
+
+// ── SEÇÃO 1: Limpar pedido dos despachos ────────────────────────────────────
+const logPed = document.getElementById('log-ped');
+const btnRmPed = document.getElementById('btn-rm-ped');
+let planoPed = [];
+
+function addLogPed(msg) {
+  logPed.textContent += (logPed.textContent === 'Pronto.' ? '' : '\n') + msg;
+  logPed.scrollTop = logPed.scrollHeight;
+}
 
 window.buscarPedido = async function() {
-  clearLog();
-  achados = [];
-  btnLimpar.disabled = true;
-  const numPed = document.getElementById('inp-pedido').value.trim();
-  if (!numPed) { logEl.textContent = '⚠ Informe o número do pedido.'; return; }
+  planoPed = [];
+  btnRmPed.disabled = true;
+  const num = document.getElementById('inp-ped').value.trim();
+  if (!num) { logPed.textContent = '⚠ Informe o número do pedido.'; return; }
 
-  logEl.textContent = `🔍 Buscando pedido #${numPed} em todo o Firebase...\n`;
+  logPed.textContent = `🔍 Buscando pedido #${num} nos despachos...\n`;
 
-  // 1. Verifica despachos
-  const snapDt = await get(ref(db, 'despachos'));
-  const dts = snapDt.val() || {};
-  let encontrouDespacho = false;
-  for (const [token, dt] of Object.entries(dts)) {
-    const paradas = dt.paradas || [];
-    const idxs = paradas.reduce((acc, p, i) => {
-      const num = String(p.pedido || p.numero_pedido || '');
-      const cod = String(p._codigo_pedido || p.codigo_pedido || '');
-      if (num === numPed || cod === numPed) acc.push(i);
-      return acc;
-    }, []);
-    if (idxs.length) {
-      encontrouDespacho = true;
-      idxs.forEach(i => {
-        const p = paradas[i];
-        const emp = p._empresa || p.empresa || '?';
-        const cli = p.cliente || p.cliente_nome || '?';
-        logEl.textContent += `  ✓ DESPACHO [${token}] rota "${dt.nomeRota||'?'}" status:${dt.statusFluxo||'?'} — parada[${i}] #${numPed} ${emp} / ${cli}\n`;
-        achados.push({ tipo: 'despacho_parada', token, idx: i, paradas, nomeRota: dt.nomeRota });
-      });
+  try {
+    const dts = await fbRead('despachos');
+    if (dts && typeof dts === 'object') {
+      for (const [token, dt] of Object.entries(dts)) {
+        const paradas = dt.paradas || [];
+        const encontrados = [];
+        paradas.forEach((p, i) => {
+          const n = String(p.pedido || p.numero_pedido || '');
+          const c = String(p._codigo_pedido || p.codigo_pedido || '');
+          if (n === num || c === num) encontrados.push(i);
+        });
+        if (encontrados.length) {
+          const novas = paradas.filter((_, i) => !encontrados.includes(i));
+          const emp = paradas[encontrados[0]]?._empresa || paradas[encontrados[0]]?.empresa || '?';
+          addLogPed(`  ✓ Despacho "${dt.nomeRota || token}" [${dt.statusFluxo || '?'}] · ${emp} · parada[${encontrados.join(',')}]`);
+          planoPed.push({ token, novasParadas: novas, nomeRota: dt.nomeRota || token });
+        }
+      }
     }
-  }
-  if (!encontrouDespacho) logEl.textContent += '  ✗ Não encontrado em despachos\n';
 
-  // 2. Verifica carteira_envio/pedidos
-  const snapCart = await get(ref(db, 'carteira_envio/pedidos'));
-  const carteira = snapCart.val();
-  const listaCart = Array.isArray(carteira) ? carteira : (carteira ? Object.values(carteira) : []);
-  const idxsCart = listaCart.reduce((acc, p, i) => {
-    const num = String(p.numero_pedido || p.pedido || '');
-    const cod = String(p.codigo_pedido || '');
-    if (num === numPed || cod === numPed) acc.push(i);
-    return acc;
-  }, []);
-  if (idxsCart.length) {
-    logEl.textContent += `  ✓ CARTEIRA — ${idxsCart.length} entrada(s) do pedido #${numPed}\n`;
-    achados.push({ tipo: 'carteira', idxs: idxsCart, lista: listaCart });
-  } else {
-    logEl.textContent += '  ✗ Não encontrado na carteira\n';
-  }
-
-  if (achados.length === 0) {
-    logEl.textContent += '\n✅ Pedido não encontrado em nenhuma estrutura. Já está limpo.\n';
-  } else {
-    logEl.textContent += `\n⚠ Encontrado em ${achados.length} local(ais). Clique em "Remover de tudo" para limpar.\n`;
-    btnLimpar.disabled = false;
+    if (planoPed.length === 0) {
+      addLogPed('✅ Pedido não encontrado em nenhum despacho. Já está limpo.');
+    } else {
+      addLogPed(`\n⚠ ${planoPed.length} despacho(s) afetado(s). Clique em "Remover dos despachos".`);
+      btnRmPed.disabled = false;
+    }
+  } catch(e) {
+    addLogPed('\n❌ Erro: ' + e.message);
   }
 };
 
-window.limparPedido = async function() {
-  if (!achados.length) return;
-  btnLimpar.disabled = true;
-  const numPed = document.getElementById('inp-pedido').value.trim();
-  logEl.textContent += `\n🗑 Iniciando remoção do pedido #${numPed}...\n`;
+window.removerPedido = async function() {
+  if (!planoPed.length) return;
+  btnRmPed.disabled = true;
+  const num = document.getElementById('inp-ped').value.trim();
+  addLogPed(`\n🗑 Removendo pedido #${num}...`);
 
-  for (const item of achados) {
-    if (item.tipo === 'despacho_parada') {
-      // Remove a parada do array e reescreve
-      const novasParadas = item.paradas.filter((_, i) => i !== item.idx);
-      try {
-        if (novasParadas.length === 0) {
-          // Se era o único pedido da rota, remove o despacho inteiro
-          await remove(ref(db, `despachos/${item.token}`));
-          logEl.textContent += `  ✅ Despacho [${item.token}] "${item.nomeRota}" removido (era o único pedido)\n`;
-        } else {
-          await set(ref(db, `despachos/${item.token}/paradas`), novasParadas);
-          logEl.textContent += `  ✅ Parada #${numPed} removida do despacho "${item.nomeRota}" (${novasParadas.length} pedido(s) restante(s))\n`;
-        }
-      } catch(e) {
-        logEl.textContent += `  ❌ Erro no despacho [${item.token}]: ${e.message}\n`;
+  for (const op of planoPed) {
+    try {
+      if (op.novasParadas.length === 0) {
+        await fbRemove(`despachos/${op.token}`);
+        addLogPed(`  ✅ Despacho "${op.nomeRota}" removido (era o único pedido)`);
+      } else {
+        await fbWrite(`despachos/${op.token}/paradas`, op.novasParadas);
+        addLogPed(`  ✅ Pedido removido de "${op.nomeRota}" (${op.novasParadas.length} restante(s))`);
       }
-    }
-
-    if (item.tipo === 'carteira') {
-      try {
-        const nova = item.lista.filter((_, i) => !item.idxs.includes(i));
-        await set(ref(db, 'carteira_envio/pedidos'), nova.length ? nova : null);
-        logEl.textContent += `  ✅ Removido da carteira (${item.idxs.length} entrada(s) excluída(s))\n`;
-      } catch(e) {
-        logEl.textContent += `  ❌ Erro na carteira: ${e.message}\n`;
-      }
+    } catch(e) {
+      addLogPed(`  ❌ Erro em "${op.nomeRota}": ${e.message}`);
     }
   }
 
-  achados = [];
-  logEl.textContent += `\n🎉 Pedido #${numPed} removido de todas as estruturas. Pode começar do zero.\n`;
+  planoPed = [];
+  addLogPed(`\n🎉 Pedido #${num} removido dos despachos. Carteira intacta.`);
+};
+
+// ── SEÇÃO 2: Deletar rota e devolver pedidos à carteira ─────────────────────
+const logRota = document.getElementById('log-rota');
+const btnDevolver = document.getElementById('btn-devolver');
+let rotaEncontrada = null; // { token, dt }
+
+function addLogRota(msg) {
+  logRota.textContent += (logRota.textContent === 'Pronto.' ? '' : '\n') + msg;
+  logRota.scrollTop = logRota.scrollHeight;
+}
+
+window.buscarRota = async function() {
+  rotaEncontrada = null;
+  btnDevolver.disabled = true;
+  const query = document.getElementById('inp-rota').value.trim().toUpperCase();
+  if (!query) { logRota.textContent = '⚠ Informe o token ou nome da rota.'; return; }
+
+  logRota.textContent = `🔍 Buscando rota "${query}"...\n`;
+
+  try {
+    const dts = await fbRead('despachos');
+    if (!dts || typeof dts !== 'object') { addLogRota('❌ Nenhum despacho encontrado.'); return; }
+
+    for (const [token, dt] of Object.entries(dts)) {
+      const nomeUp = (dt.nomeRota || '').toUpperCase();
+      const tokenUp = token.toUpperCase();
+      if (tokenUp === query || nomeUp === query || tokenUp.includes(query) || nomeUp.includes(query)) {
+        const paradas = dt.paradas || [];
+        rotaEncontrada = { token, dt };
+        addLogRota(`✓ Rota encontrada: "${dt.nomeRota || token}" [${dt.statusFluxo || '?'}]`);
+        addLogRota(`  Token: ${token}`);
+        addLogRota(`  Motorista: ${dt.motoristaNome || dt.motorista || '—'}`);
+        addLogRota(`  Paradas: ${paradas.length}`);
+        paradas.forEach((p, i) => {
+          const num = p.numero_pedido || p.pedido || '?';
+          const emp = p._empresa || p.empresa || '?';
+          addLogRota(`    [${i}] Pedido ${num} · ${emp} · ${p.cidade || p.municipio || '—'}`);
+        });
+        addLogRota(`\n⚠ Isso vai DELETAR a rota e devolver ${paradas.length} pedido(s) à carteira.`);
+        btnDevolver.disabled = false;
+        return;
+      }
+    }
+
+    addLogRota('✗ Rota não encontrada. Verifique o token ou nome.');
+  } catch(e) {
+    addLogRota('\n❌ Erro: ' + e.message);
+  }
+};
+
+window.deletarRotaDevolver = async function() {
+  if (!rotaEncontrada) return;
+  btnDevolver.disabled = true;
+
+  const { token, dt } = rotaEncontrada;
+  const paradas = dt.paradas || [];
+  const nomeRota = dt.nomeRota || token;
+
+  addLogRota(`\n↩ Devolvendo ${paradas.length} pedido(s) à carteira...`);
+
+  try {
+    // Lê carteira atual
+    const raw = await fbRead('carteira_envio/pedidos');
+    const listaAtual = Array.isArray(raw) ? raw : (raw && typeof raw === 'object' ? Object.values(raw) : []);
+
+    // Monta os pedidos a devolver a partir das paradas
+    const pedidosDevolver = paradas.map(p => {
+      // Reconstrói entrada de carteira a partir dos dados da parada
+      return {
+        numero_pedido: p.numero_pedido || p.pedido || '',
+        codigo_pedido: p._codigo_pedido || p.codigo_pedido || '',
+        cliente: p.cliente || p.nome_cliente || '',
+        cnpj: p.cnpj || p._cnpj || '',
+        cidade: p.cidade || p.municipio || '',
+        uf: p.uf || p.estado || '',
+        peso: p.peso || p.peso_total || 0,
+        valor_total: p.valor_total || p.valor || 0,
+        empresa: p._empresa || p.empresa || '',
+        _empresa: p._empresa || p.empresa || '',
+        segmento: p.segmento || p._segmento || '',
+        itens: p.itens || [],
+        ...( p._obs_atual ? { _obs_atual: p._obs_atual } : {} ),
+        devolvido_de_rota: nomeRota,
+        devolvido_em: new Date().toISOString(),
+      };
+    });
+
+    // Evita duplicatas por numero_pedido
+    const numerosDevolver = new Set(pedidosDevolver.map(p => String(p.numero_pedido)));
+    const listaSemDup = listaAtual.filter(p => !numerosDevolver.has(String(p.numero_pedido || p.pedido || '')));
+    const novaLista = [...listaSemDup, ...pedidosDevolver];
+
+    await fbWrite('carteira_envio/pedidos', novaLista);
+    addLogRota(`  ✅ ${pedidosDevolver.length} pedido(s) devolvido(s) à carteira`);
+
+    // Deleta a rota
+    addLogRota(`\n🗑 Deletando rota "${nomeRota}"...`);
+    await fbRemove(`despachos/${token}`);
+    addLogRota(`  ✅ Rota "${nomeRota}" deletada do Firebase`);
+
+    rotaEncontrada = null;
+    addLogRota(`\n🎉 Concluído! Pedidos devolvidos à carteira. Rota removida.`);
+  } catch(e) {
+    addLogRota(`\n❌ Erro: ${e.message}`);
+    btnDevolver.disabled = false;
+  }
 };
 </script>
 </body>
