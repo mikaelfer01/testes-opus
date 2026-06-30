@@ -857,80 +857,126 @@ window.confirmarFaturarPedido = async function() {
   if (!dataFat.match(/^\d{2}\/\d{2}\/\d{4}$/)) { mfpLog('⚠ Data inválida — use DD/MM/AAAA.', 'err'); return; }
 
   document.getElementById('mfp-btn-fat').disabled = true;
-  mfpLog(`\n🚀 Faturando pedido ${codigo} | empresa=${empresa} | data=${dataFat} | série=${serie}`, 'info');
+  mfpLog(`\n🚀 Iniciando faturamento via API Omie`, 'info');
+  mfpLog(`empresa=${empresa} | codigo=${codigo} | data=${dataFat} | série=${serie}`, 'raw');
 
   try {
-    // STEP 1: FaturarPedidoVenda
-    mfpLog('→ Chamando FaturarPedidoVenda...', 'info');
-    let resultFat;
-    try {
-      resultFat = await omieCall(empresa,
-        'https://app.omie.com.br/api/v1/produtos/pedido/',
-        'FaturarPedidoVenda',
-        [{ codigo_pedido: codigo, data_faturamento: dataFat, serie }]
-      );
-      mfpLog('✓ FaturarPedidoVenda OK', 'ok');
-      mfpLog(JSON.stringify(resultFat, null, 1).slice(0, 800), 'raw');
-    } catch(e) {
-      mfpLog(`❌ FaturarPedidoVenda erro: ${e.message}`, 'err');
-      resultFat = { _erro: e.message };
+    // ── STEP 1: FaturarPedidoVenda ──
+    mfpLog('\n→ [1/3] FaturarPedidoVenda...', 'info');
+    const cred = CREDENCIAIS[empresa] || CREDENCIAIS['MF Paris'];
+    const payloadFat = {
+      call: 'FaturarPedidoVenda',
+      app_key: cred.key,
+      app_secret: cred.secret,
+      param: [{ codigo_pedido: codigo, data_faturamento: dataFat, serie }]
+    };
+    mfpLog('payload: ' + JSON.stringify(payloadFat.param[0]), 'raw');
+
+    const respFat = await fetch('/api/omie', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ endpoint: 'https://app.omie.com.br/api/v1/produtos/pedido/', payload: payloadFat })
+    });
+    const dataFatR = await respFat.json();
+    mfpLog('response HTTP ' + respFat.status + ': ' + JSON.stringify(dataFatR), 'raw');
+
+    if (dataFatR.faultstring) {
+      // REDUNDANT = ainda processando, tenta de novo após aguardar
+      if (dataFatR.faultstring.includes('REDUNDANT')) {
+        const seg = parseInt((dataFatR.faultstring.match(/Aguarde (\d+)/)||[])[1]||'20') + 3;
+        mfpLog(`⏳ Omie REDUNDANT — aguardando ${seg}s e tentando novamente...`, 'info');
+        await sleep(seg * 1000);
+        const respFat2 = await fetch('/api/omie', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ endpoint: 'https://app.omie.com.br/api/v1/produtos/pedido/', payload: payloadFat })
+        });
+        const dataFat2 = await respFat2.json();
+        mfpLog('retry response: ' + JSON.stringify(dataFat2), 'raw');
+        if (dataFat2.faultstring) throw new Error('Omie: ' + dataFat2.faultstring);
+        mfpLog('✓ FaturarPedidoVenda OK (após retry)', 'ok');
+      } else {
+        throw new Error('Omie FaturarPedidoVenda: ' + dataFatR.faultstring);
+      }
+    } else {
+      mfpLog('✓ FaturarPedidoVenda retornou sem erro', 'ok');
     }
 
-    const jaFaturado = resultFat._jaFaturado || false;
+    // ── STEP 2: ConsultarPedido para obter numero_nf ──
+    mfpLog('\n→ [2/3] Aguardando 4s e consultando pedido...', 'info');
+    await sleep(4000);
 
-    // STEP 2: ConsultarPedido para pegar dados da NF
-    await sleep(jaFaturado ? 500 : 3000);
-    mfpLog('→ Consultando pedido para obter dados da NF...', 'info');
-    const resultPed = await omieCall(empresa,
-      'https://app.omie.com.br/api/v1/produtos/pedido/',
-      'ConsultarPedido',
-      [{ codigo_pedido: codigo }]
-    );
-    const infoCad = resultPed.pedido_venda_produto?.infoCadastro || resultPed.infoCadastro || {};
-    const cabPed  = resultPed.pedido_venda_produto?.cabecalho    || resultPed.cabecalho    || {};
-    mfpLog(`✓ ConsultarPedido: etapa=${cabPed.etapa||'?'} faturado=${infoCad.faturado||'N'} NF=${infoCad.numero_nf||'—'}`, 'ok');
-    mfpLog(JSON.stringify({ infoCad, etapa: cabPed.etapa }, null, 1).slice(0, 600), 'raw');
+    const payloadCons = {
+      call: 'ConsultarPedido',
+      app_key: cred.key,
+      app_secret: cred.secret,
+      param: [{ codigo_pedido: codigo }]
+    };
+    const respCons = await fetch('/api/omie', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ endpoint: 'https://app.omie.com.br/api/v1/produtos/pedido/', payload: payloadCons })
+    });
+    const dataCons = await respCons.json();
+    mfpLog('ConsultarPedido response: ' + JSON.stringify(dataCons).slice(0, 1500), 'raw');
 
-    let numero_nf = String(infoCad.numero_nf || resultFat.numero_nf || '—');
-    let serie_nf  = String(infoCad.serie_nf  || resultFat.serie     || serie);
-    let chave_nf  = infoCad.chave_nfe || resultFat.chNFe || resultFat.chave_nfe || '';
+    if (dataCons.faultstring) throw new Error('Omie ConsultarPedido: ' + dataCons.faultstring);
 
-    // STEP 3: Se ainda sem NF, tenta mais uma vez
-    if (numero_nf === '—' && !resultFat._erro) {
-      mfpLog('⏳ NF ainda não processada, aguardando 6s...', 'info');
-      await sleep(6000);
-      const r2 = await omieCall(empresa,
-        'https://app.omie.com.br/api/v1/produtos/pedido/',
-        'ConsultarPedido',
-        [{ codigo_pedido: codigo }]
-      );
-      const ic2 = r2.pedido_venda_produto?.infoCadastro || r2.infoCadastro || {};
-      numero_nf = String(ic2.numero_nf || numero_nf);
-      serie_nf  = String(ic2.serie_nf  || serie_nf);
+    // Extrai dados da NF — testa todas as localizações possíveis
+    const ic  = dataCons.pedido_venda_produto?.infoCadastro || dataCons.infoCadastro || {};
+    const cab = dataCons.pedido_venda_produto?.cabecalho    || dataCons.cabecalho    || {};
+    mfpLog(`\netapa=${cab.etapa} | faturado=${ic.faturado} | numero_nf=${ic.numero_nf||'—'} | chave=${ic.chave_nfe||'—'}`, 'ok');
+
+    let numero_nf = ic.numero_nf || '—';
+    let serie_nf  = ic.serie_nf  || serie;
+    let chave_nf  = ic.chave_nfe || '';
+
+    // ── STEP 3: Se ainda sem NF, consulta mais uma vez ──
+    if (numero_nf === '—') {
+      mfpLog('\n→ [3/3] NF ainda não disponível, aguarda mais 8s...', 'info');
+      await sleep(8000);
+      const respCons2 = await fetch('/api/omie', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ endpoint: 'https://app.omie.com.br/api/v1/produtos/pedido/', payload: payloadCons })
+      });
+      const dataCons2 = await respCons2.json();
+      const ic2 = dataCons2.pedido_venda_produto?.infoCadastro || dataCons2.infoCadastro || {};
+      numero_nf = ic2.numero_nf || '—';
+      serie_nf  = ic2.serie_nf  || serie_nf;
       chave_nf  = ic2.chave_nfe || chave_nf;
-      mfpLog(`✓ 2ª consulta: NF=${numero_nf} chave=${chave_nf||'—'}`, numero_nf !== '—' ? 'ok' : 'err');
+      mfpLog('2ª consulta: numero_nf=' + numero_nf + ' | chave=' + (chave_nf||'—'), numero_nf !== '—' ? 'ok' : 'err');
+      mfpLog('response completo: ' + JSON.stringify(dataCons2).slice(0, 1000), 'raw');
     }
 
-    if (resultFat._erro) {
-      throw new Error(resultFat._erro);
-    }
-
-    // Salva no Firebase
+    // ── Salva no Firebase ──
     const p = pedidosDetalhe[_mfpPedIdx];
     const nfKey = String(p?._codigo_pedido || p?.codigo_pedido || codigo);
-    const rastreabilidade = (p?._itensEst || []).map(it => ({ sku: it.sku||'', lote: it.lote||'', fab: it.fab||'', val: it.val||'' }));
-    const nfInfo = { codigo_pedido_omie: codigo, numero_nf, serie: serie_nf, chave_nf, empresa, status_nf: 'emitida', rastreabilidade, emitida_em: Date.now(), emitida_por: usuario?.nome || '—' };
+    const rastreabilidade = (p?._itensEst || []).map(it => ({ sku:it.sku||'', lote:it.lote||'', fab:it.fab||'', val:it.val||'' }));
+    const nfInfo = {
+      codigo_pedido_omie: codigo,
+      numero_nf: String(numero_nf),
+      serie: String(serie_nf),
+      chave_nf,
+      empresa,
+      status_nf: 'emitida',
+      rastreabilidade,
+      emitida_em: Date.now(),
+      emitida_por: usuario?.nome || '—'
+    };
 
     await fbUpd('despachos/' + dtAtual + '/faturamento', { status: 'faturando', [`nfs/${nfKey}`]: nfInfo });
-    mfpLog(`\n🎉 NF ${numero_nf} salva no OPUS!`, 'ok');
-
-    setTimeout(() => { fecharModal('modal-fat-ped'); }, 2000);
+    mfpLog(`\n🎉 NF ${numero_nf} registrada no OPUS! Chave: ${chave_nf||'pendente'}`, 'ok');
     toast(`✅ NF-e ${numero_nf} emitida!`, 'ok');
 
+    // Mantém modal aberto para o usuário ver o log completo
+    document.getElementById('mfp-btn-fat').textContent = '✓ Concluído';
+
   } catch(e) {
-    mfpLog(`\n❌ Falha: ${e.message}`, 'err');
+    mfpLog(`\n❌ ERRO: ${e.message}`, 'err');
     if (_mfpPedIdx !== null) pedidosDetalhe[_mfpPedIdx]._erroFaturamento = e.message;
     document.getElementById('mfp-btn-fat').disabled = false;
+    document.getElementById('mfp-btn-fat').textContent = '↺ Tentar novamente';
   }
 };
 
