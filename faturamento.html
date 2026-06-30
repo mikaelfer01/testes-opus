@@ -281,6 +281,46 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--i
   </div>
 </div>
 
+<!-- MODAL: FATURAR PEDIDO INDIVIDUAL -->
+<div class="modal" id="modal-fat-ped">
+  <div class="modal-card">
+    <div class="modal-t">🧾 Faturar Pedido</div>
+    <div class="modal-sub" id="mfp-sub">Verifique os dados antes de confirmar.</div>
+
+    <div class="campo-row">
+      <div>
+        <label class="campo-label">Empresa</label>
+        <select class="campo-select" id="mfp-empresa">
+          <option value="MF Paris">MF Paris</option>
+          <option value="DMS">DMS</option>
+          <option value="Profi">Profi</option>
+        </select>
+      </div>
+      <div>
+        <label class="campo-label">Série NF</label>
+        <input class="campo-input" id="mfp-serie" value="1" maxlength="3">
+      </div>
+    </div>
+
+    <label class="campo-label">Código Omie do Pedido <span style="color:var(--ink4);font-weight:400">(código interno, não o nº do pedido)</span></label>
+    <input class="campo-input" id="mfp-codigo" type="number" placeholder="Ex: 1234567890">
+
+    <label class="campo-label">Data de Faturamento</label>
+    <input class="campo-input" id="mfp-data" type="text" placeholder="DD/MM/AAAA" maxlength="10">
+
+    <div class="progress-wrap" id="mfp-log-wrap" style="display:none">
+      <div class="progress-label"><span>Log da operação</span></div>
+      <div class="progress-log" id="mfp-log" style="max-height:200px;font-family:monospace;font-size:11px"></div>
+    </div>
+
+    <div class="modal-acoes" id="mfp-acoes">
+      <button class="mbtn mbtn-c" onclick="fecharModal('modal-fat-ped')">Cancelar</button>
+      <button class="mbtn" style="background:#1d4ed8;color:#fff;flex:1" onclick="consultarPedidoOmie()">🔍 Consultar</button>
+      <button class="mbtn mbtn-ok" id="mfp-btn-fat" onclick="confirmarFaturarPedido()">✓ Faturar</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL: CONFIRMAR FAT TODOS -->
 <div class="modal" id="modal-confirmar">
   <div class="modal-card">
@@ -621,9 +661,9 @@ function renderDetalhe(token) {
         ${lotesNf ? `<div class="nf-detalhe" style="margin-top:4px;font-size:10.5px">${lotesNf}</div>` : ''}
       </div>`;
     } else if (!isFaturado) {
-      const erroFat = p._erroFaturamento ? `<div class="erro-fat">❌ Erro Omie: ${p._erroFaturamento}</div>` : '';
+      const erroFat = p._erroFaturamento ? `<div class="erro-fat">❌ ${p._erroFaturamento}</div>` : '';
       html += `<div class="ped-acoes">
-        <button class="btn-fat" onclick="faturarPedido(${i})">🧾 Faturar</button>
+        <button class="btn-fat" onclick="abrirModalFaturar(${i})">🧾 Faturar</button>
         <button class="btn-dev-cart" onclick="devolverPedidoCarteira(${i})">↩ Devolver</button>
       </div>${erroFat}`;
     }
@@ -734,28 +774,163 @@ window.togglePed = function(i) {
 };
 
 // ── FATURAR PEDIDO INDIVIDUAL ─────────────────────────────────────────────────
-window.faturarPedido = async function(i) {
+let _mfpPedIdx = null;
+
+function mfpLog(msg, tipo) {
+  const el = document.getElementById('mfp-log');
+  document.getElementById('mfp-log-wrap').style.display = '';
+  const cor = tipo === 'ok' ? '#16a34a' : tipo === 'err' ? '#dc2626' : tipo === 'raw' ? '#6b7691' : '#1d4ed8';
+  el.innerHTML += `<div style="color:${cor};margin-bottom:2px">${msg}</div>`;
+  el.scrollTop = el.scrollHeight;
+}
+
+window.abrirModalFaturar = function(i) {
+  _mfpPedIdx = i;
   const p = pedidosDetalhe[i];
   if (!p) return;
+
+  const empresa = resolverEmpresa(p);
+  const codigoPedido = p._codigo_pedido || p.codigo_pedido || '';
+  const numPed = p.pedido || p.numero_pedido || '—';
+
+  document.getElementById('mfp-sub').textContent =
+    `Pedido #${numPed} · ${p.cliente||p.cliente_nome||'—'} · ${empresa}`;
+  document.getElementById('mfp-empresa').value = empresa;
+  document.getElementById('mfp-codigo').value = codigoPedido;
+  document.getElementById('mfp-serie').value = '1';
+
+  const hoje = new Date();
+  document.getElementById('mfp-data').value =
+    String(hoje.getDate()).padStart(2,'0') + '/' +
+    String(hoje.getMonth()+1).padStart(2,'0') + '/' +
+    hoje.getFullYear();
+
+  document.getElementById('mfp-log-wrap').style.display = 'none';
+  document.getElementById('mfp-log').innerHTML = '';
+  document.getElementById('mfp-acoes').style.display = '';
+  document.getElementById('mfp-btn-fat').disabled = false;
+
   if (p._classificacao && p._classificacao.tipo !== 'venda') {
-    const ok = confirm(`${p._classificacao.label} — Pedido #${p.pedido||p.numero_pedido}\n\n${p._classificacao.desc}\n\nConfirma o faturamento deste pedido nessas condições?`);
-    if (!ok) return;
+    mfpLog(`⚠ ${p._classificacao.label}: ${p._classificacao.desc}`, 'err');
   }
-  loading('Faturando pedido #' + (p.pedido||p.numero_pedido) + '...');
+
+  abrirModal('modal-fat-ped');
+};
+
+window.consultarPedidoOmie = async function() {
+  const empresa = document.getElementById('mfp-empresa').value;
+  const codigo = parseInt(document.getElementById('mfp-codigo').value);
+  if (!codigo || isNaN(codigo)) { mfpLog('⚠ Informe o código Omie do pedido.', 'err'); return; }
+
+  mfpLog(`🔍 Consultando pedido ${codigo} na empresa ${empresa}...`, 'info');
   try {
-    const nfInfo = await executarFaturamento(p);
-    const key = p._codigo_pedido || p.codigo_pedido || ('p' + i);
-    await fbUpd('despachos/' + dtAtual + '/faturamento', {
-      status: 'faturando',
-      [`nfs/${key}`]: nfInfo
-    });
-    toast('✅ NF-e ' + nfInfo.numero_nf + ' emitida!', 'ok');
+    const r = await omieCall(empresa,
+      'https://app.omie.com.br/api/v1/produtos/pedido/',
+      'ConsultarPedido',
+      [{ codigo_pedido: codigo }]
+    );
+    const cab     = r.pedido_venda_produto?.cabecalho || r.cabecalho || {};
+    const infoCad = r.pedido_venda_produto?.infoCadastro || r.infoCadastro || {};
+    mfpLog(`✓ Pedido encontrado: etapa=${cab.etapa||'?'} | faturado=${infoCad.faturado||'N'}`, 'ok');
+    mfpLog(`  número_pedido=${cab.numero_pedido||'?'} | cliente=${cab.codigo_cliente||'?'}`, 'raw');
+    mfpLog(`  numero_nf=${infoCad.numero_nf||'—'} | chave=${infoCad.chave_nfe||'—'}`, 'raw');
+    if (infoCad.faturado === 'S') {
+      mfpLog(`⚠ Pedido já está faturado no Omie. NF Nº ${infoCad.numero_nf}`, 'ok');
+    } else if (cab.etapa !== '60') {
+      mfpLog(`⚠ Etapa atual: ${cab.etapa} (esperado 60 = A Faturar). Pode precisar mudar etapa.`, 'err');
+    }
+    // Mostra JSON compacto para diagnóstico
+    mfpLog(`--- response completo ---`, 'raw');
+    mfpLog(JSON.stringify(r, null, 1).slice(0, 1200), 'raw');
   } catch(e) {
-    pedidosDetalhe[i]._erroFaturamento = e.message;
-    renderDetalhe(dtAtual);
-    toast('❌ ' + e.message, 'err');
-  } finally {
-    esconderLoading();
+    mfpLog(`❌ Erro: ${e.message}`, 'err');
+  }
+};
+
+window.confirmarFaturarPedido = async function() {
+  const empresa = document.getElementById('mfp-empresa').value;
+  const codigo  = parseInt(document.getElementById('mfp-codigo').value);
+  const serie   = document.getElementById('mfp-serie').value || '1';
+  const dataFat = document.getElementById('mfp-data').value;
+
+  if (!codigo || isNaN(codigo)) { mfpLog('⚠ Código Omie inválido.', 'err'); return; }
+  if (!dataFat.match(/^\d{2}\/\d{2}\/\d{4}$/)) { mfpLog('⚠ Data inválida — use DD/MM/AAAA.', 'err'); return; }
+
+  document.getElementById('mfp-btn-fat').disabled = true;
+  mfpLog(`\n🚀 Faturando pedido ${codigo} | empresa=${empresa} | data=${dataFat} | série=${serie}`, 'info');
+
+  try {
+    // STEP 1: FaturarPedidoVenda
+    mfpLog('→ Chamando FaturarPedidoVenda...', 'info');
+    let resultFat;
+    try {
+      resultFat = await omieCall(empresa,
+        'https://app.omie.com.br/api/v1/produtos/pedido/',
+        'FaturarPedidoVenda',
+        [{ codigo_pedido: codigo, data_faturamento: dataFat, serie }]
+      );
+      mfpLog('✓ FaturarPedidoVenda OK', 'ok');
+      mfpLog(JSON.stringify(resultFat, null, 1).slice(0, 800), 'raw');
+    } catch(e) {
+      mfpLog(`❌ FaturarPedidoVenda erro: ${e.message}`, 'err');
+      resultFat = { _erro: e.message };
+    }
+
+    const jaFaturado = resultFat._jaFaturado || false;
+
+    // STEP 2: ConsultarPedido para pegar dados da NF
+    await sleep(jaFaturado ? 500 : 3000);
+    mfpLog('→ Consultando pedido para obter dados da NF...', 'info');
+    const resultPed = await omieCall(empresa,
+      'https://app.omie.com.br/api/v1/produtos/pedido/',
+      'ConsultarPedido',
+      [{ codigo_pedido: codigo }]
+    );
+    const infoCad = resultPed.pedido_venda_produto?.infoCadastro || resultPed.infoCadastro || {};
+    const cabPed  = resultPed.pedido_venda_produto?.cabecalho    || resultPed.cabecalho    || {};
+    mfpLog(`✓ ConsultarPedido: etapa=${cabPed.etapa||'?'} faturado=${infoCad.faturado||'N'} NF=${infoCad.numero_nf||'—'}`, 'ok');
+    mfpLog(JSON.stringify({ infoCad, etapa: cabPed.etapa }, null, 1).slice(0, 600), 'raw');
+
+    let numero_nf = String(infoCad.numero_nf || resultFat.numero_nf || '—');
+    let serie_nf  = String(infoCad.serie_nf  || resultFat.serie     || serie);
+    let chave_nf  = infoCad.chave_nfe || resultFat.chNFe || resultFat.chave_nfe || '';
+
+    // STEP 3: Se ainda sem NF, tenta mais uma vez
+    if (numero_nf === '—' && !resultFat._erro) {
+      mfpLog('⏳ NF ainda não processada, aguardando 6s...', 'info');
+      await sleep(6000);
+      const r2 = await omieCall(empresa,
+        'https://app.omie.com.br/api/v1/produtos/pedido/',
+        'ConsultarPedido',
+        [{ codigo_pedido: codigo }]
+      );
+      const ic2 = r2.pedido_venda_produto?.infoCadastro || r2.infoCadastro || {};
+      numero_nf = String(ic2.numero_nf || numero_nf);
+      serie_nf  = String(ic2.serie_nf  || serie_nf);
+      chave_nf  = ic2.chave_nfe || chave_nf;
+      mfpLog(`✓ 2ª consulta: NF=${numero_nf} chave=${chave_nf||'—'}`, numero_nf !== '—' ? 'ok' : 'err');
+    }
+
+    if (resultFat._erro) {
+      throw new Error(resultFat._erro);
+    }
+
+    // Salva no Firebase
+    const p = pedidosDetalhe[_mfpPedIdx];
+    const nfKey = String(p?._codigo_pedido || p?.codigo_pedido || codigo);
+    const rastreabilidade = (p?._itensEst || []).map(it => ({ sku: it.sku||'', lote: it.lote||'', fab: it.fab||'', val: it.val||'' }));
+    const nfInfo = { codigo_pedido_omie: codigo, numero_nf, serie: serie_nf, chave_nf, empresa, status_nf: 'emitida', rastreabilidade, emitida_em: Date.now(), emitida_por: usuario?.nome || '—' };
+
+    await fbUpd('despachos/' + dtAtual + '/faturamento', { status: 'faturando', [`nfs/${nfKey}`]: nfInfo });
+    mfpLog(`\n🎉 NF ${numero_nf} salva no OPUS!`, 'ok');
+
+    setTimeout(() => { fecharModal('modal-fat-ped'); }, 2000);
+    toast(`✅ NF-e ${numero_nf} emitida!`, 'ok');
+
+  } catch(e) {
+    mfpLog(`\n❌ Falha: ${e.message}`, 'err');
+    if (_mfpPedIdx !== null) pedidosDetalhe[_mfpPedIdx]._erroFaturamento = e.message;
+    document.getElementById('mfp-btn-fat').disabled = false;
   }
 };
 
