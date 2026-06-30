@@ -357,7 +357,7 @@ function fbUpd(path, data) { return update(ref(db, path), data); }
 function fbSet(path, data) { return set(ref(db, path), data); }
 
 // ── OMIE API ──────────────────────────────────────────────────────────────────
-async function omieCall(empresa, endpoint, call, param, retry=false) {
+async function omieCall(empresa, endpoint, call, param, _retry=false) {
   const cred = CREDENCIAIS[empresa] || CREDENCIAIS['MF Paris'];
   const resp = await fetch('/api/omie', {
     method: 'POST',
@@ -367,10 +367,17 @@ async function omieCall(empresa, endpoint, call, param, retry=false) {
   if (!resp.ok) throw new Error('HTTP ' + resp.status);
   const data = await resp.json();
   if (data.faultstring) {
-    if (data.faultstring.includes('REDUNDANT') && !retry) {
+    // REDUNDANT = Omie está processando; aguarda e re-tenta uma vez
+    if (data.faultstring.includes('REDUNDANT') && !_retry) {
       const m = data.faultstring.match(/Aguarde (\d+) segundo/);
-      await sleep(((m ? parseInt(m[1]) : 35) + 3) * 1000);
+      await sleep(((m ? parseInt(m[1]) : 20) + 2) * 1000);
       return omieCall(empresa, endpoint, call, param, true);
+    }
+    // Já faturado/NF existente → retorna flag para tratar no chamador
+    if (data.faultstring.toLowerCase().includes('já foi faturado') ||
+        data.faultstring.toLowerCase().includes('já faturado') ||
+        data.faultstring.toLowerCase().includes('nf já existe')) {
+      return { _jaFaturado: true, faultstring: data.faultstring };
     }
     throw new Error(data.faultstring);
   }
@@ -823,79 +830,77 @@ window.executarFaturarTodos = async function() {
 async function executarFaturamento(p) {
   const empresa = resolverEmpresa(p);
   const codigoPedido = parseInt(p._codigo_pedido || p.codigo_pedido);
-  if (!codigoPedido || isNaN(codigoPedido)) throw new Error('Pedido sem código Omie válido');
+  if (!codigoPedido || isNaN(codigoPedido)) throw new Error('Pedido sem código Omie válido (código: ' + (p._codigo_pedido || p.codigo_pedido) + ')');
 
-  // 1. Fatura o pedido de venda no Omie
+  // Data de faturamento: hoje no formato DD/MM/AAAA
+  const hoje = new Date();
+  const dataFat = String(hoje.getDate()).padStart(2,'0') + '/' +
+                  String(hoje.getMonth()+1).padStart(2,'0') + '/' +
+                  hoje.getFullYear();
+
+  // 1. Fatura o pedido no Omie
   const resultFat = await omieCall(empresa,
     'https://app.omie.com.br/api/v1/produtos/pedido/',
     'FaturarPedidoVenda',
-    [{ codigo_pedido: codigoPedido, documento: { serie: '1' } }]
+    [{ codigo_pedido: codigoPedido, data_faturamento: dataFat, serie: '1' }]
   );
 
-  // Extrai código NF direto do response de faturamento (vários campos possíveis)
-  let nfCod = resultFat.codigo_nf
-    || resultFat.codigo_nf_omie
-    || resultFat.nfCodigo
-    || null;
+  // Se já estava faturado, segue para buscar dados da NF existente
+  const jaFaturado = resultFat._jaFaturado;
 
-  let numero_nf_fat = String(resultFat.numero_nf || resultFat.nNF || '');
-  let serie_fat     = String(resultFat.serie || resultFat.ide?.serie || '1');
-  let chave_fat     = resultFat.chNFe || resultFat.chave_nfe || resultFat.chave_nf || '';
-
-  // 2. Aguarda processamento e consulta o pedido para pegar código NF se não veio no step 1
-  await sleep(3000);
+  // 2. Aguarda processamento e consulta o pedido para obter dados da NF
+  await sleep(jaFaturado ? 500 : 3000);
   const resultPed = await omieCall(empresa,
     'https://app.omie.com.br/api/v1/produtos/pedido/',
     'ConsultarPedido',
     [{ codigo_pedido: codigoPedido }]
   );
 
-  const cab   = resultPed.cabecalho || resultPed.pedido_venda_produto?.cabecalho || {};
-  const infNF = resultPed.informacoes_adicionais || {};
-  nfCod = nfCod || cab.codigo_nf || cab.codigo_nf_omie || null;
+  // Omie retorna os dados da NF em pedido_venda_produto.infoCadastro após faturamento
+  const infoCad = resultPed.pedido_venda_produto?.infoCadastro
+                || resultPed.infoCadastro
+                || {};
+  const cabPed  = resultPed.pedido_venda_produto?.cabecalho
+                || resultPed.cabecalho
+                || {};
 
-  let numero_nf = numero_nf_fat || cab.numero_nf || '—';
-  let serie     = serie_fat || cab.serie_nf || '1';
-  let chave_nf  = chave_fat;
-  let status_nf = 'emitida';
+  const numero_nf = String(infoCad.numero_nf || infoCad.nNF || resultFat.numero_nf || '—');
+  const serie     = String(infoCad.serie_nf  || infoCad.serie || resultFat.serie || '1');
+  const chave_nf  = infoCad.chave_nfe || infoCad.chNFe || resultFat.chNFe || resultFat.chave_nfe || '';
+  const etapa     = cabPed.etapa || '—';
 
-  if (nfCod) {
-    // 3. Consulta NF-e pelo código interno Omie para pegar chave/número definitivos
-    try {
-      await sleep(1500);
-      const resultNF = await omieCall(empresa,
-        'https://app.omie.com.br/api/v1/produtos/nf/',
-        'ConsultarNF',
-        [{ codigo_nf_omie: nfCod }]
-      );
-      // Omie retorna cabecalho com numero_nf, chaveNFe separado
-      const cabNF = resultNF.cabecalho || resultNF.nfCabecalho || {};
-      numero_nf = cabNF.numero_nf || cabNF.nNF || resultNF.numero_nf || numero_nf;
-      serie     = cabNF.serie || cabNF.serie_nf || serie;
-      chave_nf  = resultNF.chaveNFe || resultNF.chave_nfe || resultNF.protNFe?.infProt?.chNFe
-                  || cabNF.chave_nfe || chave_nf;
-      status_nf = resultNF.status_nfe || resultNF.status || 'emitida';
-    } catch(eNF) {
-      // Segue com os dados que já temos do FaturarPedidoVenda/ConsultarPedido
+  if (numero_nf === '—' && !jaFaturado) {
+    // NF ainda não processada — tenta mais uma vez após espera extra
+    await sleep(5000);
+    const resultPed2 = await omieCall(empresa,
+      'https://app.omie.com.br/api/v1/produtos/pedido/',
+      'ConsultarPedido',
+      [{ codigo_pedido: codigoPedido }]
+    );
+    const ic2 = resultPed2.pedido_venda_produto?.infoCadastro || resultPed2.infoCadastro || {};
+    if (ic2.numero_nf) {
+      return montarRetornoNF(p, empresa, codigoPedido, ic2, etapa);
     }
   }
 
-  // Registra lote/fabricação/validade dos itens separados para rastreabilidade da NF-e
+  return montarRetornoNF(p, empresa, codigoPedido, { numero_nf, serie_nf: serie, chave_nfe: chave_nf }, etapa);
+}
+
+function montarRetornoNF(p, empresa, codigoPedido, infoCad, etapa) {
   const rastreabilidade = (p._itensEst || []).map(it => ({
     sku: it.sku || '', lote: it.lote || '', fab: it.fab || '', val: it.val || ''
   }));
-
   return {
-    codigo_nf_omie: nfCod,
-    numero_nf: String(numero_nf),
-    serie: String(serie),
-    chave_nf,
-    status_nf,
+    codigo_pedido_omie: codigoPedido,
+    numero_nf:  String(infoCad.numero_nf  || infoCad.nNF   || '—'),
+    serie:      String(infoCad.serie_nf   || infoCad.serie  || '1'),
+    chave_nf:   infoCad.chave_nfe || infoCad.chNFe || '',
+    etapa,
+    status_nf: 'emitida',
     empresa,
     rastreabilidade,
     emitida_em: Date.now(),
     emitida_por: usuario?.nome || '—',
-    _debug_fat: { nfCod, resultFat_keys: Object.keys(resultFat||{}), cab_keys: Object.keys(cab||{}) }
   };
 }
 
