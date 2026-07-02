@@ -1,3 +1,8 @@
+
+
+
+
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -646,7 +651,13 @@ nav::before{
 .tab-link:hover svg,.tab-link.active svg{opacity:1;}  
 .tab-link{font-size:10px;padding:0 8px;gap:4px;}
 .tab-link svg{width:11px;height:11px;}
-.tabs-brand{font-size:12px;margin-right:12px;} 
+.tabs-brand{font-size:12px;margin-right:12px;}
+@media(max-width:768px){
+  .sb{width:100%;flex-shrink:0;max-height:55vh;border-right:none;border-bottom:1px solid var(--glass-border)}
+  .main{flex-direction:column}
+  #mapa-div,#mapa-container{min-height:45vh}
+  .g2{grid-template-columns:1fr}
+}
 </style>
 </head>
 <body>
@@ -669,6 +680,7 @@ nav::before{
   <div style="display:flex;align-items:center;gap:8px;margin-left:auto;">
     <div class="bi" id="bt">-- clientes</div>
     <div class="bi" id="bmap">Carregando mapa...</div>
+    <button class="btn" onclick="oModal('m-imp')" title="Importar pedidos (OMIE ou Excel)">📋 Importar</button>
     <button class="btn" onclick="oModal('m-est')" title="Carregar inventario">Estoque <span id="bt-est-cnt" style="font-size:9px;font-weight:700;background:rgba(34,197,94,.25);padding:1px 5px;border-radius:3px;margin-left:3px;display:none;">0</span></button>
     <button class="btn" onclick="abrirHistFretes()" title="Historico de fretes pagos">📊 Histórico <span id="bt-hist-cnt" style="font-size:9px;font-weight:700;background:rgba(14,165,233,.25);color:#0ea5e9;padding:1px 5px;border-radius:3px;margin-left:3px;display:none;">0</span></button>
     <button class="btn" onclick="centralizar()">Centralizar</button>
@@ -800,10 +812,16 @@ window.devolverCarteira = async function(idx){
     }
   }
 
-  // 2) Remove de qualquer rota que esteja
+  // 2) Remove de qualquer rota que esteja, e REINDEXA os demais índices —
+  // como CLIENTES.splice(idx,1) desloca em -1 todo mundo depois do idx
+  // removido, qualquer rota que tenha um pedido com índice MAIOR que idx
+  // precisa ter esse índice decrementado, senão ela passa a apontar para
+  // o cliente errado (ou para undefined, causando o erro em updRts/LATITUDE
+  // e travando o resto da devolução, inclusive a limpeza no Firebase).
   rotas.forEach(function(r){
-    var x = r.cl.indexOf(idx);
-    if (x >= 0) r.cl.splice(x, 1);
+    r.cl = r.cl
+      .filter(function(ci){ return ci !== idx; })
+      .map(function(ci){ return ci > idx ? ci - 1 : ci; });
   });
 
   // 3) Captura o codigo_pedido ANTES de remover da lista
@@ -986,6 +1004,8 @@ window.devolverCarteira = async function(idx){
       var iDesc = col('DESCRICAO DO PRODUTO (COMPLETA)','DESCRICAO DO PRODUTO','DESCRICAO','PRODUTO','ITEM','DESCRICAO DO ITEM');
       var iQtd  = col('QUANTIDADE (KG)','QUANTIDADE','QTD','PESO','KG');
       var iCli  = col('CLIENTE','RAZAO SOCIAL','CLIENTE (RAZAO SOCIAL)');
+      var iSit  = col('SITUACAO','STATUS','SITUACAO DO PEDIDO');
+      var iData = col('DATA DE ENTREGA','DATA ENTREGA','ENTREGA','DATA');
 
       if (iCid < 0 || iUF < 0 || iQtd < 0) {
         infoEl.style.color = '#dc2626';
@@ -1016,6 +1036,8 @@ if (qtdStr.indexOf(',') >= 0 && qtdStr.indexOf('.') >= 0) {
         var desc   = get(iDesc);
         var pedido = get(iPed);
         var cliente= iCli >= 0 ? get(iCli) : '';
+        var sit    = iSit  >= 0 ? get(iSit)  : '';
+        var dataEnt= iData >= 0 ? get(iData) : '';
 
         // Determina segmento pela descrição
         var seg = determinarSegmento('', '');
@@ -1030,12 +1052,12 @@ if (qtdStr.indexOf(',') >= 0 && qtdStr.indexOf('.') >= 0) {
           QUANTIDADE:   qtd,
           LATITUDE:     0, LONGITUDE: 0, DIST_KM: 0,
           Modalidade:   'Fiorino',
-          DATA_ENTREGA: '',
+          DATA_ENTREGA: dataEnt,
           SKU:          '',
           PRODUTO:      desc,
           PEDIDO:       pedido,
           VENDEDOR:     '',
-          SITUACAO:     'Programado',
+          SITUACAO:     sit || 'Programado',
           SEGMENTO:     seg,
           PRECO_PRACA:  0,
           _origem:      'excel'
@@ -1067,6 +1089,13 @@ if (qtdStr.indexOf(',') >= 0 && qtdStr.indexOf('.') >= 0) {
         sle.innerHTML = '<option value="">Todos estados</option>';
         ests.forEach(function(e){ var o=document.createElement('option');o.value=e;o.textContent=e;sle.appendChild(o); });
 
+        var dts = Array.from(new Set(CLIENTES.map(function(c){ return c.DATA_ENTREGA; }).filter(Boolean))).sort();
+        var sld = document.getElementById('fd');
+        if (sld) {
+          sld.innerHTML = '<option value="">Todas as datas</option>';
+          dts.forEach(function(d){ var o=document.createElement('option');o.value=d;o.textContent=d;sld.appendChild(o); });
+        }
+
         initMark(); filtrar(); upAll();
         if (typeof verificarEstoque === 'function') verificarEstoque();
 
@@ -1086,14 +1115,14 @@ if (qtdStr.indexOf(',') >= 0 && qtdStr.indexOf('.') >= 0) {
 }
 function baixarModeloRot() {
   if (typeof XLSX === 'undefined') { alert('Biblioteca XLSX não carregada.'); return; }
-  var hdr = ['Pedido', 'CEP', 'Cidade', 'Estado', 'Descrição do Produto (completa)', 'Quantidade (kg)', 'Cliente'];
+  var hdr = ['Pedido', 'CEP', 'Cidade', 'Estado', 'Descrição do Produto (completa)', 'Quantidade (kg)', 'Cliente', 'Situação', 'Data de Entrega'];
   var ex = [
-    ['7837', '44001970', 'FEIRA DE SANTANA', 'BA', 'CAFE TORRADO E MOIDO BELVEDER VACUO 500G L2502', 2.0, 'T M M MURITIBA ALIMENTOS'],
-    ['9224', '32372090', 'CONTAGEM', 'MG', 'LEITE EM PO INTEGRAL HORIZONTE 400G VITAMINAS', 1.0, 'OESA COMERCIO E REPRESENTACOES'],
-    ['11455', '29010020', 'VITORIA', 'ES', 'ACHOCOLATADO EM PO SOLUVEL 400G', 1.1, 'TRE DO ES'],
+    ['7837', '44001970', 'FEIRA DE SANTANA', 'BA', 'CAFE TORRADO E MOIDO BELVEDER VACUO 500G L2502', 2.0, 'T M M MURITIBA ALIMENTOS', 'Faturado', '05/07/2026'],
+    ['9224', '32372090', 'CONTAGEM', 'MG', 'LEITE EM PO INTEGRAL HORIZONTE 400G VITAMINAS', 1.0, 'OESA COMERCIO E REPRESENTACOES', 'Faturado', '05/07/2026'],
+    ['11455', '29010020', 'VITORIA', 'ES', 'ACHOCOLATADO EM PO SOLUVEL 400G', 1.1, 'TRE DO ES', 'Programado', ''],
   ];
   var ws = XLSX.utils.aoa_to_sheet([hdr].concat(ex));
-  ws['!cols'] = [10,12,20,8,44,14,36].map(function(w){ return {wch:w}; });
+  ws['!cols'] = [10,12,20,8,44,14,36,12,14].map(function(w){ return {wch:w}; });
   var wb2 = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb2, ws, 'Pedidos');
   XLSX.writeFile(wb2, 'modelo_importacao_roteirizador.xlsx');
@@ -1143,7 +1172,8 @@ function baixarModeloRot() {
 <!-- MODAL IMPORTAR -->
 <div class="mo h" id="m-imp">
   <div class="mb">
-    <div class="mt2">Importar pedidos do OMIE</div>
+    <div class="mt2">Importar pedidos</div>
+    <div class="sec" style="margin-top:0;">Importar do OMIE</div>
     <p style="font-size:11px;color:var(--txts);margin-bottom:14px;line-height:1.6;">
       Importa pedidos <strong style="color:#fbbf24;">Atrasados</strong>,
       <strong style="color:#22c55e;">Previstos para hoje</strong> e
@@ -1152,6 +1182,30 @@ function baixarModeloRot() {
     </p>
     <div id="is-omie" style="font-size:11px;min-height:18px;margin-bottom:12px;color:#60a5fa;line-height:1.5;"></div>
     <button class="bf p" id="btn-importar-omie" onclick="importarOmie()">🔄 Buscar pedidos do OMIE</button>
+
+    <div class="sep"></div>
+
+    <div class="sec" style="margin-top:4px;">Importar manualmente via Excel</div>
+    <p style="font-size:11px;color:var(--txts);margin-bottom:10px;line-height:1.6;">
+      Use para incluir pedidos que <strong style="color:#22c55e;">já foram faturados</strong> ou que não vieram do OMIE/Carteira.
+      Os pedidos são <strong>somados</strong> à lista atual (não substituem nada).
+    </p>
+
+    <div style="background:rgba(15,23,42,0.04);border:1px solid var(--glass-hairline);border-radius:var(--r);padding:10px 12px;margin-bottom:10px;font-size:10.5px;color:var(--txtm);line-height:1.7;">
+      <strong style="color:var(--azul-d);">Formato esperado (1ª linha = cabeçalho):</strong><br>
+      <code style="font-size:10px;color:var(--txt);">Pedido · CEP · Cidade · Estado · Descrição do Produto (completa) · Quantidade (kg) · Cliente · Situação · Data de Entrega</code><br>
+      <span style="color:var(--vm);font-weight:700;">Obrigatórias:</span> Cidade, Estado, Quantidade (kg).<br>
+      <span style="color:var(--txts);">Opcionais:</span> Pedido, CEP, Cliente, Descrição, Situação (ex.: <em>Faturado</em>), Data de Entrega (dd/mm/aaaa).<br>
+      <span style="color:#15803d;">Exemplo:</span> <code style="font-size:10px;">9224 · 32372090 · CONTAGEM · MG · LEITE EM PO 400G · 1 · OESA · Faturado · 05/07/2026</code>
+    </div>
+
+    <button class="btn" style="width:100%;margin-bottom:8px;" onclick="baixarModeloRot()">⬇️ Baixar modelo de planilha (.xlsx)</button>
+
+    <label class="bf o" style="display:block;text-align:center;cursor:pointer;margin-bottom:6px;">
+      📥 Selecionar planilha Excel
+      <input type="file" accept=".xlsx,.xls,.csv" style="display:none;" onchange="importarExcelRoteirizador(event)">
+    </label>
+    <div id="is-xlsx-rot" style="font-size:11px;min-height:18px;margin-bottom:6px;color:#1d4ed8;line-height:1.5;"></div>
 
     <div class="ma"><button class="btn" style="flex:1;" onclick="fModal('m-imp')">Fechar</button></div>
   </div>
@@ -1256,6 +1310,7 @@ function baixarModeloRot() {
         <div style="font-size:32px;margin-bottom:8px;">🗺️</div>Nenhuma rota.<br>Clique em <strong>+ Nova rota</strong>.
       </div>
       <div id="rl"></div>
+      <div id="rl-despachadas" style="margin-top:10px;"></div>
       <div id="dr" style="display:none;">
         <div class="sep"></div>
         <div class="sec" id="dt">Paradas</div>
@@ -1279,7 +1334,10 @@ function baixarModeloRot() {
 
 <!-- NOVO: aba roteirizados -->
 <div class="pan pp" id="p-rot">
-  <div class="sec">Pedidos roteirizados (despachados)</div>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+    <div class="sec" style="margin:0;">Pedidos roteirizados (despachados)</div>
+    <button class="btn p" onclick="abrirGerarTexto()" style="font-size:11px;padding:6px 14px;">📋 Gerar Texto</button>
+  </div>
   <div id="lst-rot">
     <div style="text-align:center;padding:24px;color:var(--txts);">
       Nenhum pedido despachado ainda nesta sessão.
@@ -1397,8 +1455,8 @@ function baixarModeloRot() {
 // f = Fracionado (≤5t), t = Truck (5–12t), k = Carreta (>12t)
 // lat/lng para fallback de cidade mais próxima
 // ══════════════════════════════════════════════════════════════════════════════
+  function selSvc(rid,svc){var r=rotas.find(function(r){return r.id===rid;});if(!r)return;r.svc=svc;upAll();}
 var TABELA_FRETE = [{"c":"MANAUS","e":"AM","lat":-3.1019,"lng":-60.025,"f":1.0,"t":2.9458892307692306,"k":1.1413024},{"c":"ALAGOINHAS","e":"BA","lat":-12.1367,"lng":-38.42,"f":null,"t":0.8098430769230769,"k":0.6809824000000001},{"c":"ARATACA","e":"BA","lat":-15.2583,"lng":-39.4044,"f":1.2,"t":null,"k":null},{"c":"IRECÊ","e":"BA","lat":-11.3036,"lng":-41.8556,"f":null,"t":1.029043076923077,"k":0.6371424},{"c":"PALMA DE MOLTE ALTO","e":"BA","lat":-14.3517,"lng":-40.4258,"f":1.2,"t":null,"k":null},{"c":"PIRIPIRANGA","e":"BA","lat":-11.9589,"lng":-38.8539,"f":1.25,"t":null,"k":null},{"c":"SALVADOR","e":"BA","lat":-12.9714,"lng":-38.5014,"f":null,"t":0.8014123076923076,"k":0.6809824000000001},{"c":"VITORIA DA CONQUISTA","e":"BA","lat":-14.8661,"lng":-40.8444,"f":0.75,"t":null,"k":null},{"c":"FORTALEZA","e":"CE","lat":-3.7172,"lng":-38.5433,"f":1.1,"t":0.7589661538461538,"k":0.6152224},{"c":"MORADA NOVA","e":"CE","lat":-5.1067,"lng":-38.3744,"f":null,"t":null,"k":0.6152224},{"c":"BRASILIA","e":"DF","lat":-15.7801,"lng":-47.9292,"f":0.65,"t":null,"k":null},{"c":"BARRA DE SÃO FRANCISCO","e":"ES","lat":-18.7558,"lng":-40.8906,"f":0.9,"t":null,"k":null},{"c":"CACHOEIRO DE ITAPEMIRIM","e":"ES","lat":-20.8489,"lng":-41.1131,"f":0.9,"t":null,"k":null},{"c":"CARIACICA","e":"ES","lat":-20.2642,"lng":-40.4158,"f":0.8,"t":null,"k":null},{"c":"FUNDAO","e":"ES","lat":-19.925,"lng":-40.4067,"f":1.0,"t":null,"k":null},{"c":"GUARAPARI","e":"ES","lat":-20.6717,"lng":-40.5103,"f":0.9,"t":null,"k":null},{"c":"ICONHA","e":"ES","lat":-20.7925,"lng":-40.8094,"f":0.9,"t":null,"k":null},{"c":"ITAPEMIRIM","e":"ES","lat":-21.0258,"lng":-40.9328,"f":0.9,"t":null,"k":null},{"c":"LINHARES","e":"ES","lat":-19.3928,"lng":-40.0644,"f":0.9,"t":0.4369661538461538,"k":0.3741024},{"c":"PIUMA","e":"ES","lat":-20.8344,"lng":-40.7247,"f":0.9,"t":0.4369661538461538,"k":0.3741024},{"c":"SANTA TERESA","e":"ES","lat":-19.9375,"lng":-40.5994,"f":0.9,"t":null,"k":null},{"c":"SERRA","e":"ES","lat":-20.1286,"lng":-40.3078,"f":0.9,"t":null,"k":null},{"c":"VENDA NOVA DO IMIGRANTE","e":"ES","lat":-20.3339,"lng":-41.1353,"f":0.9,"t":null,"k":null},{"c":"VIANA","e":"ES","lat":-20.3908,"lng":-40.4942,"f":0.9,"t":null,"k":null},{"c":"VILA VELHA","e":"ES","lat":-20.3297,"lng":-40.2922,"f":0.9,"t":null,"k":null},{"c":"VITORIA","e":"ES","lat":-20.3194,"lng":-40.3378,"f":0.8,"t":null,"k":null},{"c":"VITORIA / GRANDE VITORIA","e":"ES","lat":-20.3194,"lng":-40.3378,"f":null,"t":0.4369661538461538,"k":0.33026239999999996},{"c":"APARECIDA DE GOIANIA","e":"GO","lat":-16.8233,"lng":-49.2444,"f":null,"t":0.5235815384615384,"k":0.4179424},{"c":"CERES","e":"GO","lat":-15.3042,"lng":-49.5969,"f":null,"t":0.6078892307692307,"k":0.4837024},{"c":"GOIANIA","e":"GO","lat":-16.6869,"lng":-49.2648,"f":0.7,"t":0.5657353846153845,"k":0.4179424},{"c":"JARAGUA","e":"GO","lat":-15.7561,"lng":-49.3342,"f":null,"t":null,"k":0.4398624},{"c":"RIALMA","e":"GO","lat":-15.3103,"lng":-49.5803,"f":null,"t":null,"k":0.4398624},{"c":"RIO VERDE","e":"GO","lat":-17.7983,"lng":-50.9261,"f":null,"t":0.5657353846153845,"k":0.4398624},{"c":"ABRE CAMPO","e":"MG","lat":-20.2983,"lng":-42.4742,"f":0.8,"t":null,"k":null},{"c":"AGUAS FORMOSAS","e":"MG","lat":-17.0833,"lng":-40.9333,"f":1.2,"t":null,"k":null},{"c":"AIMORES","e":"MG","lat":-19.5003,"lng":-41.0711,"f":0.8,"t":null,"k":null},{"c":"ANDRADAS","e":"MG","lat":-22.0667,"lng":-46.5667,"f":0.8,"t":null,"k":null},{"c":"ARAXA","e":"MG","lat":-19.5931,"lng":-46.9436,"f":0.6,"t":null,"k":null},{"c":"ARCOS","e":"MG","lat":-20.2848,"lng":-45.5378,"f":null,"t":0.18868479999999999,"k":0.21430239999999998},{"c":"ASTOLFO DUTRA","e":"MG","lat":-21.3133,"lng":-42.8619,"f":1.0,"t":null,"k":null},{"c":"BALDIM","e":"MG","lat":-19.2033,"lng":-43.9836,"f":0.1,"t":0.1470848,"k":null},{"c":"BERIZAL","e":"MG","lat":-15.9667,"lng":-41.8333,"f":1.0,"t":null,"k":null},{"c":"BOCAIUVA","e":"MG","lat":-17.1083,"lng":-43.8156,"f":0.6,"t":null,"k":null},{"c":"BORDA DA MATA","e":"MG","lat":-22.2758,"lng":-46.1617,"f":1.0,"t":null,"k":null},{"c":"CALDAS","e":"MG","lat":-21.9167,"lng":-46.3833,"f":0.65,"t":null,"k":null},{"c":"CANAPOLIS","e":"MG","lat":-18.7328,"lng":-49.2136,"f":null,"t":0.3550848,"k":0.2975024},{"c":"CAPARAO","e":"MG","lat":-20.5206,"lng":-41.9117,"f":0.9974999999999999,"t":null,"k":null},{"c":"CAPUTIRA","e":"MG","lat":-20.2047,"lng":-42.2667,"f":1.1,"t":null,"k":null},{"c":"CARAI","e":"MG","lat":-17.1833,"lng":-41.6833,"f":null,"t":0.39668479999999995,"k":0.2975024},{"c":"CARATINGA","e":"MG","lat":-19.7906,"lng":-42.1378,"f":0.7,"t":null,"k":null},{"c":"CARAÍ","e":"MG","lat":-17.1833,"lng":-41.6833,"f":1.1,"t":null,"k":null},{"c":"CATAGUASES","e":"MG","lat":-21.3936,"lng":-42.6936,"f":0.7,"t":null,"k":null},{"c":"CONCEICAO DAS ALAGOAS","e":"MG","lat":-19.9172,"lng":-48.3853,"f":1.1,"t":null,"k":null},{"c":"CONGONHAS","e":"MG","lat":-20.5011,"lng":-43.8597,"f":0.4,"t":null,"k":null},{"c":"CONSELHEIRO LAFAIETE","e":"MG","lat":-20.66,"lng":-43.7867,"f":0.4,"t":null,"k":null},{"c":"CORACAO DE JESUS","e":"MG","lat":-16.6897,"lng":-44.3625,"f":1.0,"t":null,"k":null},{"c":"COROMANDEL","e":"MG","lat":-18.4736,"lng":-47.2,"f":null,"t":0.39668479999999995,"k":null},{"c":"CORONEL FABRICIANO","e":"MG","lat":-19.5186,"lng":-42.6269,"f":null,"t":0.2718848,"k":0.2351024},{"c":"CRISTALIA","e":"MG","lat":-16.7317,"lng":-42.8611,"f":1.4,"t":null,"k":null},{"c":"DIVINOPOLIS","e":"MG","lat":-20.1386,"lng":-44.8833,"f":0.3,"t":0.1720448,"k":0.1269424},{"c":"ERVALIA","e":"MG","lat":-20.8378,"lng":-42.6558,"f":0.7,"t":null,"k":null},{"c":"ESPINOSA","e":"MG","lat":-14.9258,"lng":-42.8139,"f":1.2,"t":null,"k":null},{"c":"FORMIGA","e":"MG","lat":-20.4631,"lng":-45.4272,"f":0.35,"t":0.2718848,"k":0.22262239999999997},{"c":"GOVERNADOR VALADARES","e":"MG","lat":-18.8514,"lng":-41.9494,"f":0.7,"t":null,"k":0.35990239999999996},{"c":"GUARDA-MOR","e":"MG","lat":-17.7731,"lng":-47.0911,"f":null,"t":0.41332479999999994,"k":0.28502239999999995},{"c":"GUAXUPE","e":"MG","lat":-21.3083,"lng":-46.7083,"f":null,"t":0.3134848,"k":0.2309424},{"c":"GUIRICEMA","e":"MG","lat":-20.5686,"lng":-48.9653,"f":1.2,"t":null,"k":null},{"c":"IBIA","e":"MG","lat":-19.4769,"lng":-46.5428,"f":0.6,"t":null,"k":null},{"c":"IBIRITE","e":"MG","lat":-20.0228,"lng":-44.0553,"f":0.15,"t":null,"k":null},{"c":"INHAPIM","e":"MG","lat":-19.5478,"lng":-42.1167,"f":1.05,"t":null,"k":null},{"c":"IPATINGA","e":"MG","lat":-19.4683,"lng":-42.5369,"f":0.6,"t":0.2718848,"k":0.2351024},{"c":"ITUIUTABA","e":"MG","lat":-18.9667,"lng":-49.4667,"f":null,"t":0.39668479999999995,"k":0.2891824},{"c":"JAIBA","e":"MG","lat":-15.3486,"lng":-43.6764,"f":1.1,"t":null,"k":null},{"c":"JANAUBA","e":"MG","lat":-15.8103,"lng":-43.3053,"f":1.1,"t":null,"k":null},{"c":"JANUARIA","e":"MG","lat":-15.4878,"lng":-44.3608,"f":null,"t":0.4382848,"k":0.35990239999999996},{"c":"JENIPAPO DE MINAS","e":"MG","lat":-17.0628,"lng":-42.2372,"f":1.3,"t":null,"k":null},{"c":"JOAO MONLEVADE","e":"MG","lat":-19.8125,"lng":-43.1733,"f":0.4,"t":null,"k":null},{"c":"JOSENOPOLIS","e":"MG","lat":-16.5378,"lng":-42.75,"f":1.3473075,"t":null,"k":null},{"c":"JUIZ DE FORA","e":"MG","lat":-21.7642,"lng":-43.3503,"f":0.65,"t":0.2635648,"k":0.21846239999999997},{"c":"LAGOA DA PRATA","e":"MG","lat":-20.0231,"lng":-45.5389,"f":0.45,"t":0.2718848,"k":0.21430239999999998},{"c":"LAGOA FORMOSA","e":"MG","lat":-18.7783,"lng":-46.4083,"f":0.65,"t":0.3550848,"k":0.24758239999999998},{"c":"LAVRAS","e":"MG","lat":-21.2453,"lng":-44.9997,"f":0.5,"t":0.2718848,"k":0.21430239999999998},{"c":"LEOPOLDINA","e":"MG","lat":-21.5319,"lng":-42.6414,"f":null,"t":0.3550848,"k":0.27670239999999996},{"c":"MANTENA","e":"MG","lat":-18.7783,"lng":-40.9869,"f":1.0,"t":null,"k":null},{"c":"MATO VERDE","e":"MG","lat":-15.4022,"lng":-42.8658,"f":1.3,"t":null,"k":null},{"c":"MIRABELA","e":"MG","lat":-16.2614,"lng":-44.165,"f":1.1,"t":null,"k":null},{"c":"MIRAI","e":"MG","lat":-21.1957,"lng":-42.6125,"f":1.0,"t":null,"k":null},{"c":"MONTALVANIA","e":"MG","lat":-14.4258,"lng":-44.3753,"f":1.1,"t":null,"k":null},{"c":"MONTE AZUL","e":"MG","lat":-15.1522,"lng":-42.8753,"f":1.1,"t":null,"k":null},{"c":"MONTE CARMELO","e":"MG","lat":-18.7267,"lng":-47.5039,"f":3.6,"t":null,"k":null},{"c":"MONTES CLAROS","e":"MG","lat":-16.7353,"lng":-43.8619,"f":0.5,"t":0.39668479999999995,"k":0.2559024},{"c":"MURIAE","e":"MG","lat":-21.1303,"lng":-42.3661,"f":0.75,"t":0.3550848,"k":0.26838239999999997},{"c":"MUZAMBINHO","e":"MG","lat":-21.3667,"lng":-46.5167,"f":null,"t":0.3134848,"k":0.2309424},{"c":"NANUQUE","e":"MG","lat":-17.8406,"lng":-40.3497,"f":1.2,"t":null,"k":null},{"c":"OLIVEIRA","e":"MG","lat":-20.6972,"lng":-44.8274,"f":0.4,"t":null,"k":null},{"c":"ORIZANIA","e":"MG","lat":-20.4836,"lng":-41.9858,"f":1.15,"t":null,"k":null},{"c":"PADRE CARVALHO","e":"MG","lat":-16.7358,"lng":-42.5042,"f":1.1,"t":null,"k":null},{"c":"PARA DE MINAS","e":"MG","lat":-19.8553,"lng":-44.6089,"f":null,"t":0.23028479999999998,"k":0.1186224},{"c":"PARACATU","e":"MG","lat":-17.2228,"lng":-46.875,"f":null,"t":0.44660479999999997,"k":0.2975024},{"c":"PATOS DE MINAS","e":"MG","lat":-18.5786,"lng":-46.5181,"f":null,"t":0.3550848,"k":0.28502239999999995},{"c":"PERDIGAO","e":"MG","lat":-19.9478,"lng":-45.0939,"f":0.4,"t":null,"k":null},{"c":"PIRANGUÇU","e":"MG","lat":-22.5253,"lng":-45.4939,"f":1.0,"t":null,"k":null},{"c":"PIRAPORA","e":"MG","lat":-17.3461,"lng":-44.9411,"f":0.7,"t":null,"k":null},{"c":"PIUMHI","e":"MG","lat":-20.4706,"lng":-45.9578,"f":0.65,"t":null,"k":null},{"c":"POCOS DE CALDAS","e":"MG","lat":-21.7892,"lng":-46.5608,"f":0.7,"t":null,"k":null},{"c":"PONTE NOVA","e":"MG","lat":-20.4156,"lng":-42.9078,"f":0.6,"t":0.2968448,"k":0.21430239999999998},{"c":"PORTEIRINHA","e":"MG","lat":-15.7419,"lng":-43.0286,"f":1.3,"t":null,"k":null},{"c":"POUSO ALEGRE","e":"MG","lat":-22.2289,"lng":-45.9361,"f":0.6,"t":null,"k":null},{"c":"POÇOS DE CALDA","e":"MG","lat":-21.7892,"lng":-46.5608,"f":null,"t":0.3134848,"k":0.2559024},{"c":"RIO PARANAIBA","e":"MG","lat":-19.1825,"lng":-46.2428,"f":0.75,"t":null,"k":null},{"c":"RIO PARDO DE MINAS","e":"MG","lat":-15.6272,"lng":-42.5403,"f":1.3,"t":null,"k":null},{"c":"RIO POMBA","e":"MG","lat":-21.2689,"lng":-43.1722,"f":0.65,"t":null,"k":null},{"c":"SALINAS","e":"MG","lat":-16.1667,"lng":-42.3,"f":0.75,"t":0.4382848,"k":0.2891824},{"c":"SANTA BARBARA DO LESTE","e":"MG","lat":-19.9717,"lng":-42.0547,"f":1.85,"t":null,"k":null},{"c":"SANTO ANTONIO DO JACINTO","e":"MG","lat":-16.5192,"lng":-40.7258,"f":1.75,"t":null,"k":null},{"c":"SANTO ANTONIO DO RETIRO","e":"MG","lat":-15.6789,"lng":-41.2622,"f":1.1,"t":null,"k":null},{"c":"SAO DOMINGOS DAS DORES","e":"MG","lat":-19.65,"lng":-42.4014,"f":1.8,"t":null,"k":null},{"c":"SAO FRANCISCO","e":"MG","lat":-15.9481,"lng":-44.8647,"f":1.1,"t":null,"k":null},{"c":"SAO JOAO DO MANHUACU","e":"MG","lat":-20.3878,"lng":-41.9733,"f":0.85,"t":null,"k":null},{"c":"SAO JOAO DO PARAISO","e":"MG","lat":-15.3539,"lng":-42.0433,"f":0.75,"t":null,"k":null},{"c":"SAO LOURENCO","e":"MG","lat":-22.1156,"lng":-45.0575,"f":0.8,"t":null,"k":null},{"c":"SAO MIGUEL DO ANTA","e":"MG","lat":-20.7042,"lng":-42.725,"f":0.7,"t":null,"k":null},{"c":"SAO TOMAS DE AQUINO","e":"MG","lat":-20.9989,"lng":-46.5953,"f":1.15,"t":null,"k":null},{"c":"SETE LAGOAS","e":"MG","lat":-19.4658,"lng":-44.2481,"f":0.25,"t":0.1470848,"k":0.1227824},{"c":"TABULEIRO","e":"MG","lat":-21.3917,"lng":-43.0806,"f":1.3,"t":0.3218048,"k":0.21430239999999998},{"c":"TAIOBEIRAS","e":"MG","lat":-15.8136,"lng":-42.2317,"f":1.3,"t":null,"k":null},{"c":"TEIXEIRA","e":"MG","lat":-18.005,"lng":-41.2767,"f":null,"t":0.3218048,"k":0.21014239999999998},{"c":"TEOFILO OTONI","e":"MG","lat":-17.8578,"lng":-41.5053,"f":0.8,"t":0.39668479999999995,"k":0.3183024},{"c":"TIMOTEO","e":"MG","lat":-19.5822,"lng":-42.6439,"f":0.65,"t":null,"k":null},{"c":"TOCANTINS","e":"MG","lat":-21.1731,"lng":-43.0194,"f":null,"t":0.3134848,"k":0.21846239999999997},{"c":"TRES CORAÇÕES","e":"MG","lat":-21.6939,"lng":-45.2569,"f":null,"t":0.3134848,"k":0.21430239999999998},{"c":"UBA","e":"MG","lat":null,"lng":null,"f":0.7,"t":null,"k":null},{"c":"UBERABA","e":"MG","lat":-19.7489,"lng":-47.9319,"f":0.6,"t":0.33844479999999993,"k":0.27670239999999996},{"c":"UBERLANDIA","e":"MG","lat":-18.9189,"lng":-48.2773,"f":0.6,"t":0.37172479999999997,"k":0.27670239999999996},{"c":"UNAI","e":"MG","lat":-16.3597,"lng":-46.8978,"f":0.7,"t":null,"k":null},{"c":"VALADARES","e":"MG","lat":null,"lng":null,"f":null,"t":0.4382848,"k":null},{"c":"VARGINHA","e":"MG","lat":null,"lng":null,"f":0.75,"t":0.3134848,"k":0.21430239999999998},{"c":"VISCONDE DO RIO BRANCO","e":"MG","lat":-21.01,"lng":-42.8381,"f":0.75,"t":null,"k":null},{"c":"CAMPO GRANDE","e":"MS","lat":-20.4697,"lng":-54.6201,"f":null,"t":0.7393507692307691,"k":0.5494624},{"c":"CUIABA","e":"MS","lat":null,"lng":null,"f":null,"t":0.8152276923076922,"k":0.6371424},{"c":"CUIABA","e":"MT","lat":-15.6014,"lng":-56.0979,"f":1.5,"t":null,"k":null},{"c":"INOCENCIO","e":"MT","lat":null,"lng":null,"f":null,"t":null,"k":0.5933024},{"c":"INOCIENCIO","e":"MT","lat":null,"lng":null,"f":null,"t":0.8198123076923076,"k":null},{"c":"LUCAS DO RIO VERDE","e":"MT","lat":null,"lng":null,"f":1.5,"t":null,"k":null},{"c":"PRIMAVERA DO LESTE","e":"MT","lat":null,"lng":null,"f":1.3,"t":null,"k":null},{"c":"RONDONOPOLIS","e":"MT","lat":-16.4736,"lng":-54.6358,"f":1.5,"t":null,"k":null},{"c":"SAPEZAL","e":"MT","lat":null,"lng":null,"f":1.3,"t":null,"k":null},{"c":"XINGUARA","e":"PA","lat":null,"lng":null,"f":2.5,"t":null,"k":null},{"c":"APARECIDA","e":"PB","lat":null,"lng":null,"f":1.35,"t":null,"k":null},{"c":"CAMPINA GRANDE (PB)","e":"PB","lat":null,"lng":null,"f":null,"t":1.11,"k":null},{"c":"JABOATAO DOS GUARARAPES","e":"PE","lat":null,"lng":null,"f":null,"t":1.09152,"k":0.6152224},{"c":"PAULISTA","e":"PE","lat":null,"lng":null,"f":1.25,"t":null,"k":null},{"c":"RECIFE","e":"PE","lat":-8.0539,"lng":-34.8811,"f":null,"t":1.09152,"k":0.6152224},{"c":"ARAPONGAS","e":"PR","lat":-23.4169,"lng":-51.4228,"f":null,"t":0.5356123076923076,"k":0.4315424},{"c":"BANDEIRANTES","e":"PR","lat":-23.1089,"lng":-50.365,"f":1.2,"t":null,"k":null},{"c":"CAMPINA GRANDE DO SUL","e":"PR","lat":null,"lng":null,"f":1.35,"t":null,"k":null},{"c":"CAMPO MOURAO","e":"PR","lat":-24.0456,"lng":-52.3833,"f":null,"t":0.6492123076923075,"k":0.5087904},{"c":"CASCAVEL","e":"PR","lat":-24.9558,"lng":-53.4553,"f":null,"t":0.71912,"k":null},{"c":"CURITBA","e":"PR","lat":null,"lng":null,"f":null,"t":0.6317353846153846,"k":0.5087904},{"c":"CURITIBA","e":"PR","lat":-25.4297,"lng":-49.2711,"f":1.0,"t":null,"k":null},{"c":"FOZ DO IGUAÇU","e":"PR","lat":null,"lng":null,"f":1.25,"t":0.8065046153846154,"k":0.5905824},{"c":"FRANCISCO BELTRAO","e":"PR","lat":-26.0814,"lng":-53.0558,"f":null,"t":0.7802892307692307,"k":0.5905824},{"c":"GUARACI","e":"PR","lat":null,"lng":null,"f":null,"t":0.5793046153846153,"k":0.4179104},{"c":"GUARAPUAVA","e":"PR","lat":-25.3906,"lng":-51.4628,"f":null,"t":0.6754276923076923,"k":0.5087904},{"c":"JATAIZINHO","e":"PR","lat":null,"lng":null,"f":1.2,"t":null,"k":null},{"c":"LONDRINA","e":"PR","lat":-23.3089,"lng":-51.1672,"f":null,"t":0.5618276923076923,"k":0.42245439999999995},{"c":"MARECHAL CANDIDO RONDON","e":"PR","lat":-24.5567,"lng":-54.0553,"f":null,"t":null,"k":0.4997024},{"c":"MARINGA","e":"PR","lat":-23.4256,"lng":-51.9381,"f":1.3,"t":0.6317353846153846,"k":0.5224224},{"c":"PARANAVAI","e":"PR","lat":-23.0717,"lng":-52.4628,"f":1.2,"t":0.6317353846153846,"k":0.4997024},{"c":"PATO BRANCO","e":"PR","lat":null,"lng":null,"f":null,"t":0.8065046153846154,"k":0.5905824},{"c":"PINHAIS","e":"PR","lat":null,"lng":null,"f":1.0,"t":null,"k":null},{"c":"PONTA GROSSA","e":"PR","lat":-25.0947,"lng":-50.1619,"f":1.0,"t":0.60552,"k":0.45426239999999996},{"c":"RIBEIRAO CLARO","e":"PR","lat":null,"lng":null,"f":null,"t":null,"k":0.45426239999999996},{"c":"ROLÁNDIA","e":"PR","lat":null,"lng":null,"f":1.2,"t":null,"k":null},{"c":"SABAUDIA","e":"PR","lat":-23.3939,"lng":-51.5256,"f":null,"t":0.5793046153846153,"k":0.4315424},{"c":"SERTANOPOLIS","e":"PR","lat":null,"lng":null,"f":1.2,"t":null,"k":null},{"c":"SÃO TOME","e":"PR","lat":null,"lng":null,"f":0.65,"t":0.6317353846153846,"k":0.4997024},{"c":"TOLEDO","e":"PR","lat":-24.7222,"lng":-53.7433,"f":1.2,"t":0.7628123076923077,"k":0.4997024},{"c":"UMUARAMA","e":"PR","lat":-23.7661,"lng":-53.3253,"f":1.25,"t":0.6754276923076923,"k":0.4997024},{"c":"ARMACAO DOS BUZIOS","e":"RJ","lat":-22.7497,"lng":-41.8817,"f":1.0,"t":null,"k":null},{"c":"BARRA DO PIRAI","e":"RJ","lat":null,"lng":null,"f":0.9,"t":null,"k":null},{"c":"BARRA DO PIRAÍ","e":"RJ","lat":null,"lng":null,"f":null,"t":0.4546584615384615,"k":0.3270304},{"c":"BELFORD ROXO","e":"RJ","lat":-22.7628,"lng":-43.3994,"f":0.9,"t":null,"k":null},{"c":"BOM JESUS DO ITABAPOANA","e":"RJ","lat":-21.1397,"lng":-41.6786,"f":0.9,"t":null,"k":null},{"c":"CABO FRIO","e":"RJ","lat":-22.8789,"lng":-42.0189,"f":0.9,"t":null,"k":null},{"c":"CAMPOS DOS GOYTACAZES","e":"RJ","lat":-21.7558,"lng":-41.3306,"f":0.9,"t":null,"k":null},{"c":"CORDEIRO","e":"RJ","lat":-22.0217,"lng":-42.3614,"f":0.9,"t":null,"k":null},{"c":"DUQUE DE CAXIAS","e":"RJ","lat":-22.7853,"lng":-43.3117,"f":0.9,"t":0.39348923076923076,"k":null},{"c":"ITAGUAI","e":"RJ","lat":-22.8561,"lng":-43.7742,"f":1.0,"t":null,"k":null},{"c":"ITAPERUNA","e":"RJ","lat":-21.2028,"lng":-41.8881,"f":0.75,"t":null,"k":null},{"c":"MACAE","e":"RJ","lat":-22.3717,"lng":-41.7869,"f":0.75,"t":null,"k":null},{"c":"MACUCO","e":"RJ","lat":null,"lng":null,"f":0.9,"t":0.3235815384615384,"k":0.3406624},{"c":"MAGE","e":"RJ","lat":-22.6567,"lng":-43.0378,"f":0.9,"t":null,"k":null},{"c":"NITEROI","e":"RJ","lat":-22.8833,"lng":-43.1036,"f":0.9,"t":null,"k":null},{"c":"NOVA FRIBURGO","e":"RJ","lat":-22.2817,"lng":-42.5311,"f":0.9,"t":null,"k":null},{"c":"NOVA IGUACU","e":"RJ","lat":-22.7592,"lng":-43.4511,"f":0.9,"t":null,"k":null},{"c":"PATY DO ALFERES","e":"RJ","lat":null,"lng":null,"f":0.9,"t":null,"k":null},{"c":"PETROPOLIS","e":"RJ","lat":-22.505,"lng":-43.1781,"f":0.85,"t":null,"k":null},{"c":"RIO BONITO","e":"RJ","lat":null,"lng":null,"f":0.9,"t":null,"k":null},{"c":"RIO DAS OSTRAS","e":"RJ","lat":-22.5261,"lng":-41.9442,"f":0.9,"t":null,"k":null},{"c":"RIO DE JANEIRO","e":"RJ","lat":-22.9083,"lng":-43.1964,"f":0.8,"t":0.4546584615384615,"k":0.3088544},{"c":"SANTO ANTONIO DE PADUA","e":"RJ","lat":null,"lng":null,"f":0.9,"t":null,"k":null},{"c":"SAO FRANCISCO DE ITABOPOANA","e":"RJ","lat":null,"lng":null,"f":0.9,"t":null,"k":null},{"c":"SAO GONCALO","e":"RJ","lat":null,"lng":null,"f":0.85,"t":null,"k":null},{"c":"SAO JOAO DE MERITI","e":"RJ","lat":-22.8014,"lng":-43.3703,"f":0.9,"t":null,"k":null},{"c":"SAO PEDRO DA ALDEIA","e":"RJ","lat":null,"lng":null,"f":0.9,"t":null,"k":null},{"c":"SAQUAREMA","e":"RJ","lat":null,"lng":null,"f":1.2,"t":null,"k":null},{"c":"TEREZOPLIS","e":"RJ","lat":null,"lng":null,"f":null,"t":0.40222769230769223,"k":0.2952224},{"c":"TREIS RIOS","e":"RJ","lat":null,"lng":null,"f":0.9,"t":null,"k":null},{"c":"VOLTA REDONDA","e":"RJ","lat":-22.5231,"lng":-44.0994,"f":0.85,"t":null,"k":null},{"c":"BOA VISTA","e":"RR","lat":2.8197,"lng":-60.6733,"f":null,"t":2.0655046153846155,"k":1.7989024},{"c":"ALVORADA","e":"RS","lat":-29.99,"lng":-51.0842,"f":1.5,"t":null,"k":null},{"c":"BENTO GONCALVES","e":"RS","lat":-29.1728,"lng":-51.5183,"f":1.7,"t":null,"k":null},{"c":"CAXIAS DO SUL","e":"RS","lat":-29.1681,"lng":-51.1794,"f":1.4,"t":0.8566276923076923,"k":0.6590623999999999},{"c":"ENCANTADO","e":"RS","lat":null,"lng":null,"f":null,"t":0.9789661538461538,"k":0.6590623999999999},{"c":"ERECHIM","e":"RS","lat":null,"lng":null,"f":null,"t":0.9789661538461538,"k":0.6590623999999999},{"c":"ESTEIO","e":"RS","lat":-29.8569,"lng":-51.1792,"f":2.0,"t":null,"k":null},{"c":"ESTRELA","e":"RS","lat":null,"lng":null,"f":null,"t":0.9352738461538461,"k":0.6809824000000001},{"c":"GRAVATAI","e":"RS","lat":null,"lng":null,"f":2.0,"t":null,"k":null},{"c":"LAJEADO","e":"RS","lat":-29.4633,"lng":-51.9633,"f":1.8,"t":null,"k":null},{"c":"NOVO HAMBURGO","e":"RS","lat":-29.6789,"lng":-51.1294,"f":null,"t":0.8915815384615384,"k":0.6459104},{"c":"PORTAO","e":"RS","lat":null,"lng":null,"f":1.6,"t":null,"k":null},{"c":"PORTO ALEGRE","e":"RS","lat":-30.0346,"lng":-51.2177,"f":1.35,"t":0.9265353846153845,"k":0.6809824000000001},{"c":"SANTA MARIA","e":"RS","lat":null,"lng":null,"f":null,"t":0.9789661538461538,"k":0.7248224000000001},{"c":"SANTANA DO LIVRAMENTO","e":"RS","lat":null,"lng":null,"f":1.5,"t":null,"k":null},{"c":"URUGUAIANA","e":"RS","lat":-29.7547,"lng":-57.0858,"f":null,"t":1.24112,"k":0.8344224},{"c":"VIAMAO","e":"RS","lat":null,"lng":null,"f":1.9,"t":null,"k":null},{"c":"WESTFÁLIA","e":"RS","lat":null,"lng":null,"f":1.7,"t":null,"k":null},{"c":"ARARANGUA","e":"SC","lat":-28.9342,"lng":-49.4858,"f":1.2,"t":null,"k":null},{"c":"BALNEARIO CAMBORIÚ","e":"SC","lat":null,"lng":null,"f":null,"t":0.6047507692307692,"k":null},{"c":"BLUMENAU","e":"SC","lat":-26.9192,"lng":-49.0661,"f":1.2,"t":0.77952,"k":0.5360543999999999},{"c":"BRAÇO DO NORTE","e":"SC","lat":null,"lng":null,"f":null,"t":0.77952,"k":0.6814623999999999},{"c":"BRUSQUE","e":"SC","lat":null,"lng":null,"f":1.35,"t":0.6746584615384615,"k":0.5451424},{"c":"CAMBORIU","e":"SC","lat":-27.0242,"lng":-48.6531,"f":1.3,"t":null,"k":null},{"c":"CHAPECO","e":"SC","lat":-27.1008,"lng":-52.6158,"f":null,"t":0.8057353846153846,"k":0.6042143999999999},{"c":"CONCORDIA","e":"SC","lat":-27.2342,"lng":-52.0272,"f":null,"t":0.7707815384615384,"k":0.8995744},{"c":"CRISCIUMA","e":"SC","lat":null,"lng":null,"f":null,"t":0.796996923076923,"k":0.5996704},{"c":"DIONISIO CERQUEIRA","e":"SC","lat":-26.2567,"lng":-53.6358,"f":1.45,"t":null,"k":null},{"c":"FLORIANOPOLIS","e":"SC","lat":-27.5954,"lng":-48.548,"f":null,"t":0.77952,"k":0.5360543999999999},{"c":"GAROPABA","e":"SC","lat":null,"lng":null,"f":1.6,"t":null,"k":null},{"c":"GUARAMIRIM","e":"SC","lat":null,"lng":null,"f":null,"t":null,"k":0.5224224},{"c":"IMBITUBA","e":"SC","lat":null,"lng":null,"f":null,"t":0.7533046153846154,"k":0.5633184},{"c":"ITAJAI","e":"SC","lat":-26.9078,"lng":-48.6619,"f":1.3,"t":null,"k":null},{"c":"JARAGUA DO SUL","e":"SC","lat":null,"lng":null,"f":null,"t":0.683396923076923,"k":0.5224224},{"c":"JOINVILLE","e":"SC","lat":-26.3044,"lng":-48.8458,"f":1.2,"t":null,"k":null},{"c":"LAGES","e":"SC","lat":-27.8167,"lng":-50.3261,"f":null,"t":0.77952,"k":0.5633184},{"c":"OURO","e":"SC","lat":null,"lng":null,"f":1.5,"t":null,"k":null},{"c":"SAO JOSE","e":"SC","lat":-27.5917,"lng":-48.6239,"f":1.3,"t":null,"k":null},{"c":"SCHROEDER","e":"SC","lat":null,"lng":null,"f":null,"t":0.6047507692307692,"k":0.5451424},{"c":"SÃO LOURENÇO DO OESTE","e":"SC","lat":null,"lng":null,"f":null,"t":0.77952,"k":0.5905824},{"c":"SÃO MIGUEL DO OESTE","e":"SC","lat":null,"lng":null,"f":null,"t":0.8406892307692307,"k":0.6360224},{"c":"TIJUCAS","e":"SC","lat":null,"lng":null,"f":1.6,"t":null,"k":null},{"c":"TREZE TILIAS","e":"SC","lat":null,"lng":null,"f":null,"t":null,"k":0.6042143999999999},{"c":"ARACAJU","e":"SE","lat":-10.9167,"lng":-37.05,"f":1.4,"t":null,"k":null},{"c":"ABC PAULISTA","e":"SP","lat":-23.6505,"lng":-46.5286,"f":null,"t":0.3645815384615384,"k":0.3063104},{"c":"AGUAI","e":"SP","lat":-22.0617,"lng":-46.9764,"f":null,"t":0.3208892307692307,"k":0.27904639999999997},{"c":"AMPARO","e":"SP","lat":-22.7039,"lng":-46.7694,"f":null,"t":0.3645815384615384,"k":0.27904639999999997},{"c":"ANGATUBA","e":"SP","lat":-23.4919,"lng":-48.4153,"f":null,"t":0.4519661538461538,"k":0.4199104},{"c":"APARECIDA","e":"SP","lat":-22.8497,"lng":-45.2314,"f":0.8,"t":null,"k":null},{"c":"ARACATUBA","e":"SP","lat":null,"lng":null,"f":1.0,"t":null,"k":null},{"c":"ARARAQUARA","e":"SP","lat":-21.7942,"lng":-48.1756,"f":0.9,"t":null,"k":null},{"c":"ASSIS","e":"SP","lat":-22.6603,"lng":-50.4122,"f":1.0,"t":null,"k":null},{"c":"BARUERI","e":"SP","lat":null,"lng":null,"f":null,"t":0.3645815384615384,"k":0.2654144},{"c":"BIRIGUI","e":"SP","lat":-21.2883,"lng":-50.3394,"f":1.0,"t":null,"k":null},{"c":"CABREUVA","e":"SP","lat":-23.3083,"lng":-47.1333,"f":0.9,"t":null,"k":null},{"c":"CAIEIRAS","e":"SP","lat":null,"lng":null,"f":null,"t":0.3208892307692307,"k":0.2881344},{"c":"CAMPINAS","e":"SP","lat":-22.9056,"lng":-47.0608,"f":null,"t":0.3645815384615384,"k":0.2745024},{"c":"CAMPOS DO JORDÃO","e":"SP","lat":null,"lng":null,"f":0.9,"t":null,"k":null},{"c":"CASA BRANCA","e":"SP","lat":null,"lng":null,"f":null,"t":0.37332,"k":0.27904639999999997},{"c":"CATANDUVA","e":"SP","lat":null,"lng":null,"f":null,"t":null,"k":0.38810239999999996},{"c":"CATANDUVA + QUALYCON","e":"SP","lat":null,"lng":null,"f":null,"t":0.4956584615384615,"k":0.4108224},{"c":"CATTANDUVA","e":"SP","lat":null,"lng":null,"f":null,"t":0.4956584615384615,"k":null},{"c":"CERQUEIRA CESAR","e":"SP","lat":-23.0392,"lng":-49.1653,"f":null,"t":null,"k":0.3653824},{"c":"COTIA","e":"SP","lat":null,"lng":null,"f":null,"t":0.3645815384615384,"k":0.28359039999999996},{"c":"CRAVINHOS","e":"SP","lat":null,"lng":null,"f":0.9,"t":null,"k":null},{"c":"FERNANDOPOLIS","e":"SP","lat":null,"lng":null,"f":1.4,"t":null,"k":null},{"c":"FERRAZ DE VANCONCELOS","e":"SP","lat":null,"lng":null,"f":null,"t":0.33836615384615387,"k":0.2699584},{"c":"GUARULHOS","e":"SP","lat":null,"lng":null,"f":0.8,"t":0.33836615384615387,"k":0.2654144},{"c":"HORTOLANDIA","e":"SP","lat":null,"lng":null,"f":0.8,"t":0.33836615384615387,"k":0.2745024},{"c":"IGARACU DO TIETE","e":"SP","lat":null,"lng":null,"f":null,"t":0.44150461538461544,"k":null},{"c":"ILHABELA","e":"SP","lat":null,"lng":null,"f":1.4,"t":null,"k":null},{"c":"INDAIATUBA","e":"SP","lat":null,"lng":null,"f":null,"t":0.3645815384615384,"k":0.2745024},{"c":"ITAPEVI","e":"SP","lat":null,"lng":null,"f":0.9,"t":null,"k":null},{"c":"ITAPIRA","e":"SP","lat":-22.4358,"lng":-46.8217,"f":null,"t":0.3645815384615384,"k":0.25178239999999996},{"c":"ITU","e":"SP","lat":null,"lng":null,"f":0.9,"t":0.3645815384615384,"k":0.2745024},{"c":"JACAREI","e":"SP","lat":null,"lng":null,"f":null,"t":0.34710461538461534,"k":0.3108544},{"c":"JACUPIRANGA","e":"SP","lat":null,"lng":null,"f":null,"t":0.6005199999999999,"k":null},{"c":"JUNDIAI","e":"SP","lat":null,"lng":null,"f":0.95,"t":0.33836615384615387,"k":0.2745024},{"c":"LIMEIRA","e":"SP","lat":-22.5642,"lng":-47.4011,"f":0.85,"t":null,"k":null},{"c":"MARILIA","e":"SP","lat":null,"lng":null,"f":null,"t":0.5131353846153845,"k":0.3744704},{"c":"MIRANDOPOLIS","e":"SP","lat":-21.1333,"lng":-51.1039,"f":null,"t":0.4869199999999999,"k":0.3653824},{"c":"MIRASSOL","e":"SP","lat":null,"lng":null,"f":null,"t":0.4956584615384615,"k":0.3653824},{"c":"MOCOCA","e":"SP","lat":null,"lng":null,"f":null,"t":0.39079692307692304,"k":0.27904639999999997},{"c":"MOGI DAS CRUZES","e":"SP","lat":null,"lng":null,"f":null,"t":0.33836615384615387,"k":0.2699584},{"c":"OSASCO","e":"SP","lat":-23.5322,"lng":-46.7919,"f":null,"t":0.33836615384615387,"k":0.2654144},{"c":"OURINHOS","e":"SP","lat":-22.9781,"lng":-49.8697,"f":1.0,"t":0.5131353846153845,"k":0.3653824},{"c":"PATROCINIO PAULISTA","e":"SP","lat":null,"lng":null,"f":1.0,"t":0.47913279999999997,"k":0.2972224},{"c":"PINDAMONHANGABA","e":"SP","lat":-22.9364,"lng":-45.4622,"f":0.9,"t":null,"k":null},{"c":"PIRACICABA","e":"SP","lat":-22.7253,"lng":-47.6492,"f":null,"t":0.34710461538461534,"k":0.3017664},{"c":"POMPEIA","e":"SP","lat":null,"lng":null,"f":null,"t":0.4519661538461538,"k":0.4199104},{"c":"PORTO FELIZ","e":"SP","lat":-23.2133,"lng":-47.5239,"f":null,"t":0.3645815384615384,"k":0.2745024},{"c":"PRAIA GRANDE","e":"SP","lat":null,"lng":null,"f":1.0,"t":null,"k":null},{"c":"PRESIDENTE PRUDENTE","e":"SP","lat":null,"lng":null,"f":0.85,"t":null,"k":null},{"c":"PROMISSÃO","e":"SP","lat":null,"lng":null,"f":null,"t":0.47818153846153844,"k":null},{"c":"RANCHARIA","e":"SP","lat":-22.2272,"lng":-50.8919,"f":null,"t":0.4956584615384615,"k":null},{"c":"RIBEIRAO PIRES","e":"SP","lat":null,"lng":null,"f":0.75,"t":null,"k":null},{"c":"RIBEIRAO PRETO","e":"SP","lat":-21.1783,"lng":-47.81,"f":0.75,"t":0.4170123076923077,"k":0.3063104},{"c":"RIBEIRÃO PIRES","e":"SP","lat":null,"lng":null,"f":null,"t":0.3645815384615384,"k":null},{"c":"RIO CLARO","e":"SP","lat":null,"lng":null,"f":null,"t":0.43448923076923074,"k":0.3517504},{"c":"SALTO","e":"SP","lat":null,"lng":null,"f":null,"t":0.34710461538461534,"k":0.2699584},{"c":"SANTOS","e":"SP","lat":-23.9608,"lng":-46.3328,"f":null,"t":0.44322769230769227,"k":0.3017664},{"c":"SAO JOAO DA BOA VISTA","e":"SP","lat":null,"lng":null,"f":0.75,"t":null,"k":null},{"c":"SAO JOSE DO RIO PRETO","e":"SP","lat":null,"lng":null,"f":0.75,"t":null,"k":null},{"c":"SAO PAULO","e":"SP","lat":-23.5505,"lng":-46.6333,"f":0.65,"t":null,"k":null},{"c":"SAO SEBASTIAO","e":"SP","lat":null,"lng":null,"f":1.2,"t":null,"k":null},{"c":"SOROCABA","e":"SP","lat":-23.5017,"lng":-47.4581,"f":0.8,"t":0.3645815384615384,"k":0.3244864},{"c":"SUMARE","e":"SP","lat":null,"lng":null,"f":null,"t":0.33836615384615387,"k":0.2972224},{"c":"SÃO BERNARDO DO CAMPO","e":"SP","lat":null,"lng":null,"f":null,"t":0.43448923076923074,"k":0.3108544},{"c":"SÃO JOAO DA BOA VISTA","e":"SP","lat":null,"lng":null,"f":null,"t":0.3645815384615384,"k":0.2745024},{"c":"SÃO JOSE DO RIO PRETO","e":"SP","lat":null,"lng":null,"f":null,"t":0.4956584615384615,"k":0.3653824},{"c":"SÃO JOSE DOS CAMPOS","e":"SP","lat":null,"lng":null,"f":null,"t":0.3645815384615384,"k":0.2972224},{"c":"SÃO PAULO","e":"SP","lat":null,"lng":null,"f":null,"t":0.3519008,"k":0.2745024},{"c":"TAQUARITUBA","e":"SP","lat":-23.5314,"lng":-49.2431,"f":1.6,"t":0.4956584615384615,"k":0.3653824},{"c":"TARUMA","e":"SP","lat":null,"lng":null,"f":null,"t":0.4519661538461538,"k":0.3653824},{"c":"TAUBATE","e":"SP","lat":null,"lng":null,"f":null,"t":0.34710461538461534,"k":0.2972224},{"c":"VAGEM GRANDE DO SUL","e":"SP","lat":null,"lng":null,"f":null,"t":0.3645815384615384,"k":null},{"c":"VALINHOS","e":"SP","lat":null,"lng":null,"f":0.9,"t":0.34710461538461534,"k":null},{"c":"VARGEM GRANDE DO SUL","e":"SP","lat":-21.8311,"lng":-46.8933,"f":null,"t":null,"k":0.2745024},{"c":"VARGEM GRANDE PAULISTA","e":"SP","lat":null,"lng":null,"f":1.0,"t":null,"k":null},{"c":"VINHEDO","e":"SP","lat":null,"lng":null,"f":0.9,"t":0.34710461538461534,"k":0.2972224},{"c":"VOTORANTIM","e":"SP","lat":null,"lng":null,"f":1.2,"t":null,"k":null},{"c":"ARAGUAINA","e":"TO","lat":null,"lng":null,"f":1.3,"t":null,"k":null},{"c":"PALMAS","e":"TO","lat":-10.2128,"lng":-48.3603,"f":1.6,"t":null,"k":null}];
-
 // ── Regras de peso por modal ──────────────────────────────────────────────────
 // Fracionado/Fretebras: ≤ 5.000 kg  | Truck: 5.001–12.000 kg | Carreta: > 12.000 kg
 var LIMITE_FRAC  = 5000;
@@ -2037,14 +2095,7 @@ function _norm(s){return (s||'').toString().toUpperCase()
   .replace(/[ÓÒÔÕÖ]/g,'O').replace(/[ÚÙÛÜ]/g,'U').replace(/Ç/g,'C')
   .replace(/\s+/g,' ').trim();}
  
-// Modal da tarifa baseado no PESO total da rota:
-// f = Fracionado (≤5t) | t = Truck (5–12t) | k = Carreta (>12t)
-function getModalTarifa(mod,peso){
-  if(mod==='correios')return null;
-  if(peso<=5000)return 'f';
-  if(peso<=12000)return 't';
-  return 'k';
-}
+// getModalTarifa: definida acima
  
 // Procura cidade na TABELA_FRETE: 1) match exato cidade+estado, 2) cidade mais próxima no mesmo estado
 function findCidadeTabela(cidade,estado,lat,lng){
@@ -2066,25 +2117,7 @@ function findCidadeTabela(cidade,estado,lat,lng){
   return null;
 }
  
-// Para cada cliente da rota, busca tarifa R$/kg e grava em c._tarifa_valor / c._tarifa_fonte
-function calcPrecosPraca(r){
-  var s=stats(r);
-  var modal=getModalTarifa(r.mod,s.peso);
-  var out={};
-  r.cl.forEach(function(i){
-    var c=CLIENTES[i];
-    var info=findCidadeTabela(c.CIDADE,c.ESTADO,c.LATITUDE,c.LONGITUDE);
-    var tarifa=0,fonte='nd';
-    if(info&&modal&&info.item[modal]!=null){
-      tarifa=info.item[modal];
-      fonte=info.fonte;
-    }
-    c._tarifa_valor=tarifa;
-    c._tarifa_fonte=fonte;
-    out[i]=tarifa;
-  });
-  return out;
-}
+// calcPrecosPraca: definida acima
  
 // Sugestão de frete TOTAL para Fretebras/Dedicado: soma(qtd × tarifa R$/kg)
 function sugerirFreteRota(r){
@@ -2206,15 +2239,22 @@ function calcCor(r){
   return p.then(function(){r.cc=res;});
 }
 
-function selSvc(rid,svc){var r=rotas.find(function(r){return r.id===rid;});if(!r)return;r.svc=svc;upAll();}
-
 var fmt=function(v){return 'R$ '+v.toLocaleString('pt-BR',{minimumFractionDigits:2});};
+
+function updDR(){
+  var r = rotas.find(function(rr){ return rr.id === rotaId; });
+  var dr = document.getElementById('dr');
+  if (!r) { dr.style.display = 'none'; return; }
+  dr.style.display = 'block';
+  document.getElementById('dt').textContent = 'Paradas (' + r.cl.length + ')';
+  updFB(r);
+  updPar(r);
+}
 
 function upAll(){
   rotas.forEach(aplicarSugestaoAuto);
   updIco();updRts();updLR();updDR();updLC();updRes();updSt();updBg();updMR();
 }
-
 // ════════ MINI-RESUMO FLUTUANTE NO MAPA ════════
 function updMR(){
   var el=document.getElementById('mres');if(!el)return;
@@ -2599,8 +2639,9 @@ function updRts(){
 }
 
 function updLR(){
-  document.getElementById('rv').style.display=rotas.length?'none':'block';
-  document.getElementById('rl').innerHTML=rotas.map(function(r){
+  var rotasAtivas = rotas.filter(function(r){ return !r._token; });
+  document.getElementById('rv').style.display=rotasAtivas.length?'none':'block';
+  document.getElementById('rl').innerHTML=rotasAtivas.map(function(r){
     var s=stats(r);var ic=r.mod==='correios';
     var fs='--';
     if(ic&&r.cc){
@@ -2608,7 +2649,6 @@ function updLR(){
       else{var tp=r.cc.reduce(function(a,x){return a+x.pac;},0);fs='PAC:'+fmt(tp);}
     }else if(ic){fs='Calc...';}else if(s.frete>0){fs=fmt(s.frete);}
     var sl=ic?(r.svc?'['+r.svc.toUpperCase()+']':'[PAC/SEDEX]'):'';
-    // Modal de tarifa em uso
     var mt=getModalTarifa(r.mod,s.peso);
     var mtLabel=mt==='f'?'Frac':mt==='t'?'Truck':mt==='k'?'Carreta':'';
     var mtBadge=mtLabel?'<span style="font-size:9px;background:rgba(34,197,94,.2);color:#4ade80;padding:1px 5px;border-radius:3px;margin-left:4px;">'+mtLabel+'</span>':'';
@@ -2628,17 +2668,24 @@ function updLR(){
 +'</select>'
 +'</div></div>';
   }).join('');
-}
 
-function updDR(){
-  var r=rotas.find(function(r){return r.id===rotaId;});
-  var d=document.getElementById('dr');
-  if(!r||!r.cl.length){d.style.display='none';return;}
-  d.style.display='block';
-  document.getElementById('dt').textContent='Paradas - '+r.nome;
-  updFB(r);updPar(r);
+  var rotasDespachadas = rotas.filter(function(r){ return r._token; });
+  var elD = document.getElementById('rl-despachadas');
+  if (elD) {
+    if (!rotasDespachadas.length) { elD.innerHTML=''; }
+    else {
+      elD.innerHTML = '<div class="sec" style="margin-top:14px;">Despachadas (' + rotasDespachadas.length + ')</div>' +
+        rotasDespachadas.map(function(r){
+          var s = stats(r);
+          return '<div class="rc" style="opacity:.75;cursor:default;">'
+            +'<div class="rch"><div class="rco" style="background:'+r.cor+'"></div><div class="rn">'+r.nome+'</div>'
+            +'<span style="font-size:9px;font-weight:700;background:#15803d;color:#fff;padding:3px 9px;border-radius:6px;">✅ Enviado</span></div>'
+            +'<div style="font-size:10px;color:var(--txts);">'+(MLBL[r.mod]||'--')+' · '+s.n+' paradas · '+s.peso.toFixed(0)+' kg</div>'
+            +'</div>';
+        }).join('');
+    }
+  }
 }
-
 function updFB(r){
   var el=document.getElementById('fc');var ic=r.mod==='correios';
   if(ic){
@@ -2979,12 +3026,40 @@ var GEO_FALLBACK_UF = {
 // Geocoda um CEP. Retorna Promise<{lat,lng,cidade,estado,fonte}>
 function geocodeCep(cep, cidadeFallback, estadoFallback){
   var k = limparCepStr(cep);
-  if (GEO_CACHE[k]) return Promise.resolve(GEO_CACHE[k]);
-  if (!k || k === '00000000') {
+  if (GEO_CACHE[k] && k !== '00000000') return Promise.resolve(GEO_CACHE[k]);
+
+  function fallbackUF(){
     var fb = GEO_FALLBACK_UF[(estadoFallback||'').toUpperCase()] || [-15.78,-47.93];
-    return Promise.resolve({ lat: fb[0], lng: fb[1], cidade: cidadeFallback||'', estado: estadoFallback||'', fonte: 'fallback-uf' });
+    return { lat: fb[0], lng: fb[1], cidade: cidadeFallback||'', estado: estadoFallback||'', fonte: 'fallback-uf' };
   }
-  // AwesomeAPI: devolve lat/lng diretamente
+
+  function porCidade(){
+    if (!cidadeFallback) return Promise.resolve(fallbackUF());
+    var q = encodeURIComponent(cidadeFallback + ', ' + (estadoFallback||'') + ', Brasil');
+    return fetch('https://nominatim.openstreetmap.org/search?q=' + q + '&format=json&limit=1&countrycodes=br')
+      .then(function(r){ return r.json(); })
+      .then(function(arr){
+        if (!arr || !arr.length) return fallbackUF();
+        var res = {
+          lat: parseFloat(arr[0].lat),
+          lng: parseFloat(arr[0].lon),
+          cidade: cidadeFallback, estado: estadoFallback||'',
+          fonte: 'nominatim-cidade'
+        };
+        // cacheia por cidade+UF (não por CEP, já que CEP não existe)
+        var kCidade = 'CID_' + _norm(cidadeFallback) + '_' + (estadoFallback||'').toUpperCase();
+        GEO_CACHE[kCidade] = res;
+        return res;
+      })
+      .catch(function(){ return fallbackUF(); });
+  }
+
+  if (!k || k === '00000000') {
+    var kCidade = 'CID_' + _norm(cidadeFallback||'') + '_' + (estadoFallback||'').toUpperCase();
+    if (GEO_CACHE[kCidade]) return Promise.resolve(GEO_CACHE[kCidade]);
+    return porCidade();
+  }
+
   return fetch('https://cep.awesomeapi.com.br/json/' + k)
     .then(function(r){ if(!r.ok) throw new Error('cep '+r.status); return r.json(); })
     .then(function(d){
@@ -3000,7 +3075,6 @@ function geocodeCep(cep, cidadeFallback, estadoFallback){
       return res;
     })
     .catch(function(){
-      // Fallback: ViaCEP -> Nominatim (cidade,estado)
       return fetch('https://viacep.com.br/ws/' + k + '/json/')
         .then(function(r){ return r.json(); })
         .then(function(d){
@@ -3022,13 +3096,9 @@ function geocodeCep(cep, cidadeFallback, estadoFallback){
               return res;
             });
         })
-        .catch(function(){
-          var fb = GEO_FALLBACK_UF[(estadoFallback||'').toUpperCase()] || [-15.78,-47.93];
-          return { lat: fb[0], lng: fb[1], cidade: cidadeFallback||'', estado: estadoFallback||'', fonte: 'fallback-uf' };
-        });
+        .catch(function(){ return porCidade(); });
     });
 }
-
 // Geocoda uma lista de pedidos em batches (concorrencia limitada)
 function geocodeBatch(pedidos, onProgress){
   var idx = 0, total = pedidos.length, concorrencia = 4;
@@ -4015,10 +4085,11 @@ function salvarSessao(){
     var snap = {
       ts: Date.now(),
       clientes: CLIENTES,
-      rotas: rotas.map(function(r){
-        return { id:r.id, nome:r.nome, mod:r.mod, cap:r.cap, vkm:r.vkm, vfix:r.vfix,
-                 cor:r.cor, cl:r.cl, svc:r.svc, emb:r.emb, tipo:r.tipo, saida:r.saida };
-      }),
+     rotas: rotas.map(function(r){
+  return { id:r.id, nome:r.nome, mod:r.mod, cap:r.cap, vkm:r.vkm, vfix:r.vfix,
+           cor:r.cor, cl:r.cl, svc:r.svc, emb:r.emb, tipo:r.tipo, saida:r.saida,
+           motoristaId:r.motoristaId, _token:r._token, _link:r._link };
+}),
       rotaSeq: typeof rotaSeq !== 'undefined' ? rotaSeq : 1
     };
     // Salva no Firebase (compartilhado entre máquinas) E no localStorage (fallback offline)
@@ -4433,14 +4504,33 @@ async function exportarFarol(){
       });
     });
   }
-  if(typeof XLSX==='undefined'){alert('XLSX nao carregou.');if(btn){btn.textContent='Exportar para o Farol';btn.disabled=false;}return;}
+ if(typeof XLSX==='undefined'){alert('XLSX nao carregou.');if(btn){btn.textContent='Exportar para o Farol';btn.disabled=false;}return;}
   var hdr=['ROTA','VEICULO','MODAL_TARIFA','PEDIDO','CLIENTE','CIDADE','ESTADO','PESO','LICITACAO','SKU','PRODUTO','TARIFA_KG','FONTE_TARIFA','EMBARQUE','PREV_ENTREGA','FRETE_RATEIO','STATUS'];
   var rows=[hdr].concat(peds.map(function(p){return hdr.map(function(k){var v=p[k];return(v===null||v===undefined||v==='')?'':v;});}));
   var ws=XLSX.utils.aoa_to_sheet(rows);ws['!cols']=[16,14,10,10,38,20,6,8,12,12,30,10,10,12,14,12,10].map(function(w){return{wch:w};});
   var wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Farol');
   XLSX.writeFile(wb,'farol_'+new Date().toLocaleDateString('pt-BR').replace(/[/]/g,'-')+'.xlsx');
+
+  if(btn){btn.textContent='Gravando no Sheets...';}
+  try{
+    var respFarol = await fetch('/api/farol-proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'appendFarol', data: peds })
+    });
+    var jsonFarol = await respFarol.json();
+    if (jsonFarol && jsonFarol.ok) {
+      toastRot('📊 '+peds.length+' linha(s) gravada(s) no Farol!','ok');
+    } else {
+      toastRot('⚠️ Excel gerado, mas Sheets falhou: '+(jsonFarol&&jsonFarol.erro||'erro desconhecido'),'err');
+    }
+    }catch(e){
+    console.warn('[Farol] erro ao gravar no Sheets:',e.message);
+    toastRot('⚠️ Excel gerado, mas Sheets falhou (rede).','err');
+  }
+
   if(btn){btn.textContent='Exportar para o Farol';btn.disabled=false;}
-  alert('Arquivo gerado! Importe no Farol.');
+  alert('Arquivo gerado e enviado ao Farol!');
 }
 
 function aplicarSugManual(rid){
@@ -4535,7 +4625,7 @@ function copiar(){var t=document.getElementById('ta');t.select();document.execCo
 
 function setTab(t){
   if (t==='inap' && typeof renderInaptos==='function') renderInaptos();
-  if (t==='rot' && typeof renderRoteirizados==='function') renderRoteirizados();
+  if (t==='rot' && typeof carregarHistoricoRoteirizados==='function') carregarHistoricoRoteirizados();
   ['cli','rotas','resumo','inap','rot','export'].forEach(function(x){
     document.getElementById('t-'+x).classList.toggle('on',x===t);
     document.getElementById('p-'+x).classList.toggle('on',x===t);
@@ -4671,6 +4761,14 @@ function lerCarteira(){
 }
 function processarPedidosCarteira(pedidos) {
   if (!pedidos || !pedidos.length) return;
+
+  // Chave única de cada pedido — usada para NÃO duplicar e preservar os já carregados
+  function chavePedido(c){ return String(c._codigo_pedido || c.PEDIDO || '').trim(); }
+
+  // Mapa dos pedidos que já estão na tela (inclui os já roteirizados, ainda não despachados)
+  var existentes = {};
+  CLIENTES.forEach(function(c){ var k = chavePedido(c); if (k) existentes[k] = true; });
+
   var novos = pedidos.map(function(p){
     var seg = p.departamento === 'Licitação' ? 'LICITACAO' : 'COMERCIAL';
     var pesoTotal = (p.itens||[]).reduce(function(s,it){ return s + (it.quantidade||0); }, 0);
@@ -4692,10 +4790,21 @@ function processarPedidosCarteira(pedidos) {
                  peso_liquido: it.peso_liquido||0 };
       })
     };
+  }).filter(function(c){
+    // MERGE: só adiciona pedidos que AINDA não estão carregados (evita sobrescrever/duplicar)
+    var k = chavePedido(c);
+    return k ? !existentes[k] : true;
   });
-  var paraGeo = novos.filter(function(c){ return !c.LATITUDE || c.LATITUDE === 0; });
+
   var infoEl = document.getElementById('is-omie');
-  if (infoEl) infoEl.textContent = '📦 ' + novos.length + ' pedido(s) recebidos da Carteira. Geocodificando...';
+
+  if (!novos.length){
+    if (infoEl) infoEl.textContent = '✅ Carteira sincronizada — nenhum pedido novo.';
+    return;
+  }
+
+  var paraGeo = novos.filter(function(c){ return !c.LATITUDE || c.LATITUDE === 0; });
+  if (infoEl) infoEl.textContent = '📦 ' + novos.length + ' novo(s) pedido(s) da Carteira. Geocodificando...';
   geocodeBatch(paraGeo, function(done, total){
     if (infoEl) infoEl.textContent = '📍 Geocodificando ' + done + '/' + total + '...';
   }).then(function(){
@@ -4704,14 +4813,14 @@ function processarPedidosCarteira(pedidos) {
         c.DIST_KM = Math.round(hav({lat:CD.lat,lng:CD.lng},{lat:c.LATITUDE,lng:c.LONGITUDE}));
     });
     var validos = novos.filter(function(c){ return c.LATITUDE && c.LONGITUDE; });
-    CLIENTES.length = 0;
+    // MERGE: anexa os novos ao final, SEM apagar os já existentes (preserva índices das rotas)
     validos.forEach(function(c){ CLIENTES.push(c); });
     cliFilt = CLIENTES.slice();
     markers.forEach(function(m){ if(map) map.removeLayer(m); });
     markers.length = 0;
     initMark(); filtrar(); upAll();
     if (typeof verificarEstoque === 'function') verificarEstoque();
-    if (infoEl) infoEl.textContent = '✅ ' + validos.length + ' pedido(s) da Carteira carregados!';
+    if (infoEl) infoEl.textContent = '✅ ' + validos.length + ' novo(s) pedido(s) adicionado(s) · Total: ' + CLIENTES.length + '.';
   });
 }
 
@@ -4751,42 +4860,37 @@ function carregarMotoristasLS(){
     }
   } catch(e){}
 
-  var db = getDB();
-  if (!db) return;
-
-  db.ref('motoristas').on('value', function(snap){
-    var val = snap.val();
-    var fbList = val ? Object.values(val) : [];
-
-    if (fbList.length >= MOTORISTAS.length) {
+  fetch('/api/firebase-read', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path: 'motoristas' })
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(data){
+    var fbList = data ? Object.values(data) : [];
+    if (fbList.length) {
       MOTORISTAS = fbList;
       try { localStorage.setItem(MOTORISTAS_KEY, JSON.stringify(MOTORISTAS)); } catch(e){}
-    } else if (fbList.length > 0) {
-      var todos = MOTORISTAS.concat(fbList);
-      var seen = {};
-      MOTORISTAS = todos.filter(function(m){
-        if (seen[m.id]) return false;
-        seen[m.id] = true;
-        return true;
-      });
-      salvarMotoristasLS();
     }
     atualizarSelectMotoristas();
-    upAll();
-  });
-}
-function salvarMotoristasLS(){
-  var db = getDB();
-  if(db){
-    var obj = {};
-    MOTORISTAS.forEach(function(m){ obj[m.id] = m; });
-    db.ref('motoristas').set(obj);
-  }
-  try{ localStorage.setItem(MOTORISTAS_KEY, JSON.stringify(MOTORISTAS)); }catch(e){}
+    if (typeof upAll === 'function') upAll();
+  })
+  .catch(function(e){ console.warn('[Motoristas] erro ao carregar:', e.message); });
 }
 
+function salvarMotoristasLS(){
+  try{ localStorage.setItem(MOTORISTAS_KEY, JSON.stringify(MOTORISTAS)); }catch(e){}
+  var obj = {};
+  MOTORISTAS.forEach(function(m){ obj[m.id] = m; });
+  fetch('/api/firebase-write', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path: 'motoristas', data: obj })
+  }).catch(function(e){ console.warn('[Motoristas] erro ao salvar:', e.message); });
+}
 function abrirCadastroMotoristas(){
   limparFormMotorista();
+  carregarMotoristasLS();
   renderListaMotoristas();
   oModal('m-motoristas');
 }
@@ -4794,7 +4898,8 @@ function abrirCadastroMotoristas(){
 function limparFormMotorista(){
   document.getElementById('mot-edit-id').value = '';
   ['mot-nome','mot-cpf','mot-tel','mot-cnh','mot-venc-cnh','mot-placa',
-   'mot-veiculo','mot-renavan','mot-antt','mot-rntrc','mot-seguradora','mot-apolice','mot-obs'
+   'mot-veiculo','mot-renavan','mot-antt','mot-rntrc','mot-seguradora','mot-apolice','mot-obs',
+   'mot-pix','mot-pix-nome'
   ].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
   var cat = document.getElementById('mot-cat-cnh'); if(cat) cat.value='B';
   var t = document.querySelector('#m-motoristas .mt2'); if(t) t.textContent='🚗 Cadastrar Motorista';
@@ -4815,11 +4920,15 @@ function salvarMotorista(){
     rntrc:      (document.getElementById('mot-rntrc').value||'').trim(),
     seguradora: (document.getElementById('mot-seguradora').value||'').trim(),
     apolice:    (document.getElementById('mot-apolice').value||'').trim(),
-    obs:        (document.getElementById('mot-obs').value||'').trim()
+    obs:        (document.getElementById('mot-obs').value||'').trim(),
+    pix:        (document.getElementById('mot-pix').value||'').trim(),
+    pixNome:    (document.getElementById('mot-pix-nome').value||'').trim()
   };
-  if (!campos.nome)     { alert('Nome é obrigatório!');     return; }
-  if (!campos.telefone) { alert('Telefone é obrigatório!'); return; }
-  if (!campos.placa)    { alert('Placa é obrigatória!');    return; }
+  if (!campos.nome)     { alert('Nome é obrigatório!');                     return; }
+  if (!campos.telefone) { alert('Telefone é obrigatório!');                  return; }
+  if (!campos.placa)    { alert('Placa é obrigatória!');                     return; }
+  if (!campos.pix)      { alert('Chave PIX é obrigatória!');                 return; }
+  if (!campos.pixNome)  { alert('Nome do beneficiário PIX é obrigatório!'); return; }
 
   var editId = document.getElementById('mot-edit-id').value;
   if (editId) {
@@ -4854,6 +4963,8 @@ function editarMotorista(id){
   document.getElementById('mot-seguradora').value  = m.seguradora||'';
   document.getElementById('mot-apolice').value     = m.apolice||'';
   document.getElementById('mot-obs').value         = m.obs||'';
+  document.getElementById('mot-pix').value         = m.pix||'';
+  document.getElementById('mot-pix-nome').value    = m.pixNome||'';
   var t = document.querySelector('#m-motoristas .mt2'); if(t) t.textContent='✏️ Editar Motorista';
   renderListaMotoristas();
 }
@@ -5448,21 +5559,25 @@ fetch('/api/firebase-write', {
     r._link = link;
 // Remove os pedidos despachados do carteira_envio
 try {
-  var db = getDB();
-  if (db) {
-    db.ref('carteira_envio/pedidos').once('value', function(snap){
-      var lista = snap.val() || [];
-      var codsRota = paradas.map(function(p){ return String(p._codigo_pedido); });
-      var restantes = lista.filter(function(p){
-        return !codsRota.includes(String(p.codigo_pedido));
-      });
-      if (restantes.length) {
-        db.ref('carteira_envio/pedidos').set(restantes);
-      } else {
-        db.ref('carteira_envio').remove();
-      }
+  fetch('/api/firebase-read', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path: 'carteira_envio/pedidos' })
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(lista){
+    if (!Array.isArray(lista)) lista = [];
+    var codsRota = paradas.map(function(p){ return String(p._codigo_pedido); });
+    var restantes = lista.filter(function(p){
+      return !codsRota.includes(String(p.codigo_pedido));
     });
-  }
+    return fetch('/api/firebase-write', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: 'carteira_envio/pedidos', data: restantes })
+    });
+  })
+  .catch(function(e){ console.warn('[Despacho] limpeza carteira_envio:', e.message); });
 } catch(e) { console.warn('[Despacho] limpeza carteira_envio:', e.message); }
    
    // Salva histórico no Sheets
@@ -5594,10 +5709,13 @@ updLR = function(){
       div.style.cssText = 'margin-top:8px;display:flex;gap:6px;';
 
       var btnDesp = document.createElement('button');
-      btnDesp.className = 'btn btn-despachar';
-btnDesp.style.background = r._token ? 'rgba(22,163,74,.3)' : 'linear-gradient(135deg,#1d4ed8,#1e40af)';
-      btnDesp.style.cssText = 'flex:1;font-size:11px;padding:7px;';
-      btnDesp.textContent = r._token ? '✅ Enviado' : '📦 Enviar para Separação';
+btnDesp.className = 'btn btn-despachar';
+btnDesp.style.cssText = 'flex:1;font-size:11px;padding:7px;' +
+  (r._token
+    ? 'background:rgba(22,163,74,.14);border:1px solid rgba(22,163,74,.35);'
+    : 'background:rgba(30,64,175,.10);border:1px solid rgba(30,64,175,.30);') +
+  'color:#000;font-weight:700;';
+btnDesp.textContent = r._token ? '✅ Enviado' : '📦 Enviar para Separação';
       btnDesp.style.opacity = r._token ? '0.7' : '1';
       btnDesp.onclick = function(e){
         e.stopPropagation();
@@ -5669,14 +5787,18 @@ var _roteirizados = [];
 
 function registrarRoteirizados(r, paradas, motorista, token){
   var agora = new Date();
-  _roteirizados.push({
+  var dataKey = agora.getFullYear() + '-' + String(agora.getMonth()+1).padStart(2,'0') + '-' + String(agora.getDate()).padStart(2,'0');
+  var registro = {
     rotaNome: r.nome,
     motoristaNome: motorista.nome,
     motoristaPlaca: motorista.placa || '—',
     motoristaTel: motorista.telefone || '',
+    motoristaId: motorista.id || '',
+    motoristaPix: motorista.pix || '',
+    motoristaPixNome: motorista.pixNome || '',
     token: token,
     link: r._link || '',
-    tsDespacho: agora,
+    tsDespacho: agora.getTime(),
     paradas: paradas.map(function(p){
       return {
         cliente: p.cliente,
@@ -5688,26 +5810,79 @@ function registrarRoteirizados(r, paradas, motorista, token){
         produto: p.produto
       };
     })
-  });
-  var badge = document.getElementById('b-rot');
-  if (badge) {
-    badge.style.display = 'inline-block';
-    badge.textContent = _roteirizados.length;
-  }
-}
+  };
 
+  // grava local (cache rápido pra sessão atual)
+  _roteirizados.push(Object.assign({}, registro, { tsDespacho: agora }));
+  var badge = document.getElementById('b-rot');
+  if (badge) { badge.style.display = 'inline-block'; badge.textContent = _roteirizados.length; }
+
+  // grava no Firebase — permanente, visível pra todos
+  fetch('/api/firebase-write', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path: 'historico_roteirizados/' + dataKey + '/' + token, data: registro })
+  }).catch(function(e){ console.warn('[Historico] erro ao salvar:', e.message); });
+}
+var HIST_ROT_DADOS = {}; // { '2026-06-30': [registro, registro, ...], ... }
+var HIST_ROT_DATA_ATIVA = null;
+
+function carregarHistoricoRoteirizados(){
+  var el = document.getElementById('lst-rot');
+  if (el) el.innerHTML = '<div style="text-align:center;padding:24px;color:var(--txts);">Carregando histórico...</div>';
+
+  fetch('/api/firebase-read', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path: 'historico_roteirizados' })
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(data){
+    HIST_ROT_DADOS = data || {};
+    var datas = Object.keys(HIST_ROT_DADOS).sort().reverse(); // mais recente primeiro
+    if (!HIST_ROT_DATA_ATIVA && datas.length) HIST_ROT_DATA_ATIVA = datas[0];
+    renderRoteirizados();
+  })
+  .catch(function(e){
+    console.warn('[Historico] erro ao carregar:', e.message);
+    if (el) el.innerHTML = '<div style="text-align:center;padding:24px;color:#dc2626;">Erro ao carregar histórico: ' + e.message + '</div>';
+  });
+}
 function renderRoteirizados(){
   var el = document.getElementById('lst-rot');
   if (!el) return;
-  if (!_roteirizados.length){
-    el.innerHTML = '<div style="text-align:center;padding:24px;color:var(--txts);">Nenhum pedido despachado ainda nesta sessão.</div>';
+  var datas = Object.keys(HIST_ROT_DADOS).sort().reverse();
+  if (!datas.length){
+    el.innerHTML = '<div style="text-align:center;padding:24px;color:var(--txts);">Nenhum histórico encontrado.</div>';
     return;
   }
-  el.innerHTML = _roteirizados.map(function(d, di){
-    var hora = d.tsDespacho.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
-    var data = d.tsDespacho.toLocaleDateString('pt-BR');
-    var pesoTotal = d.paradas.reduce(function(s,p){ return s+(p.peso||0); },0);
-    var paradasHtml = d.paradas.map(function(p, pi){
+  if (!HIST_ROT_DATA_ATIVA || datas.indexOf(HIST_ROT_DATA_ATIVA) < 0) HIST_ROT_DATA_ATIVA = datas[0];
+
+  var tabsHtml = '<div style="display:flex;gap:6px;overflow-x:auto;margin-bottom:12px;padding-bottom:4px;">' +
+    datas.map(function(d){
+      var qtd = HIST_ROT_DADOS[d] ? Object.keys(HIST_ROT_DADOS[d]).length : 0;
+      var dObj = new Date(d + 'T00:00:00');
+      var lbl = dObj.toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit' });
+      var ativo = d === HIST_ROT_DATA_ATIVA;
+      return '<button onclick="selecionarDataHist(\'' + d + '\')" style="flex-shrink:0;padding:6px 12px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid ' +
+        (ativo ? 'var(--azul)' : 'var(--glass-hairline)') + ';background:' + (ativo ? 'var(--azul)' : 'rgba(255,255,255,.6)') + ';color:' + (ativo ? '#fff' : 'var(--txtm)') + ';">' +
+        lbl + ' (' + qtd + ')</button>';
+    }).join('') + '</div>';
+
+  var registrosObj = HIST_ROT_DADOS[HIST_ROT_DATA_ATIVA] || {};
+  var registros = Object.keys(registrosObj).map(function(tok){ return registrosObj[tok]; })
+    .sort(function(a,b){ return (b.tsDespacho||0) - (a.tsDespacho||0); });
+
+  if (!registros.length){
+    el.innerHTML = tabsHtml + '<div style="text-align:center;padding:24px;color:var(--txts);">Nenhum despacho nesta data.</div>';
+    return;
+  }
+
+  var corpo = registros.map(function(d){
+    var dt = new Date(d.tsDespacho);
+    var hora = dt.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+    var pesoTotal = (d.paradas||[]).reduce(function(s,p){ return s+(p.peso||0); },0);
+    var paradasHtml = (d.paradas||[]).map(function(p, pi){
       var segCor = p.segmento==='LICITACAO'?'#7c3aed':(p.segmento==='AMOSTRA'?'#ea580c':'#1d4ed8');
       var segBg  = p.segmento==='LICITACAO'?'rgba(124,58,237,.1)':(p.segmento==='AMOSTRA'?'rgba(234,88,12,.1)':'rgba(29,78,216,.08)');
       return '<div style="display:flex;align-items:flex-start;gap:8px;padding:7px 0;border-bottom:1px solid rgba(15,23,42,.06);">'
@@ -5730,7 +5905,7 @@ function renderRoteirizados(){
       +'</div>'
       +'<div style="text-align:right;flex-shrink:0;">'
       +'<div style="font-size:10px;color:var(--txts);">Despachado</div>'
-      +'<div style="font-size:11px;font-weight:700;color:var(--verde);">'+hora+' · '+data+'</div>'
+      +'<div style="font-size:11px;font-weight:700;color:var(--verde);">'+hora+'</div>'
       +'</div>'
       +'</div>'
       +'<div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">'
@@ -5743,8 +5918,151 @@ function renderRoteirizados(){
       +'</div>'
       +'</div>';
   }).join('');
-}   
-console.log('[OPUS Despacho] Patch carregado!');
+
+  el.innerHTML = tabsHtml + corpo;
+}
+
+function selecionarDataHist(d){
+  HIST_ROT_DATA_ATIVA = d;
+  renderRoteirizados();
+}
+
+// ═══════════════════════════════════════════════════════
+// GERAR TEXTO PARA MOTORISTAS
+// ═══════════════════════════════════════════════════════
+var _rotSelecionados = {};
+
+function abrirGerarTexto(){
+  var registrosObj = HIST_ROT_DADOS[HIST_ROT_DATA_ATIVA] || {};
+  var registros = Object.keys(registrosObj).map(function(tok){ return registrosObj[tok]; })
+    .sort(function(a,b){ return (b.tsDespacho||0) - (a.tsDespacho||0); });
+
+  if (!registros.length){ toastRot('Nenhuma rota despachada nesta data.', 'err'); return; }
+  _rotSelecionados = {};
+
+  var lista = registros.map(function(d){
+    var pesoTotal = (d.paradas||[]).reduce(function(s,p){ return s+(p.peso||0); }, 0);
+    var tok = d.token;
+    return '<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(255,255,255,.7);border:1px solid var(--glass-border);border-radius:8px;margin-bottom:6px;cursor:pointer;">'
+      + '<input type="checkbox" value="' + tok + '" onchange="toggleRotSel(this,\'' + tok + '\')" style="width:16px;height:16px;accent-color:var(--azul);">'
+      + '<div style="flex:1;">'
+      + '<div style="font-size:12px;font-weight:700;color:var(--azul-d);">' + d.rotaNome + '</div>'
+      + '<div style="font-size:10px;color:var(--txts);">🚗 ' + d.motoristaNome + ' · ' + (d.motoristaPlaca||'—') + ' · ' + (d.paradas||[]).length + ' paradas · ' + pesoTotal + ' kg</div>'
+      + '</div></label>';
+  }).join('');
+
+  document.getElementById('gt-lista').innerHTML = lista;
+  document.getElementById('gt-resultado').style.display = 'none';
+  document.getElementById('gt-texto').value = '';
+  oModal('m-gerar-texto');
+}
+
+function toggleRotSel(el, tok){
+  var registrosObj = HIST_ROT_DADOS[HIST_ROT_DATA_ATIVA] || {};
+  if (el.checked){ _rotSelecionados[tok] = registrosObj[tok]; }
+  else { delete _rotSelecionados[tok]; }
+}
+
+var OMIE_CREDS_GT = {
+  MFP:  { key: '952260381072',   secret: '8300b385eeec583c71439709ab866fc7' },
+  DMS:  { key: '1340821992510',  secret: 'dac287f9b3ec422dc93da6cdbcc3e0b2' },
+  PROFI:{ key: '6625695374298',  secret: '588e34aa9429edcae86f5e87c47a65df' }
+};
+
+function buscarNFPorPedido(numeroPedido, empresa){
+  var creds = OMIE_CREDS_GT[empresa] || OMIE_CREDS_GT['MFP'];
+  return fetch('/api/omie', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      endpoint: 'https://app.omie.com.br/api/v1/produtos/nf/',
+      payload: {
+        call: 'ListarNF',
+        app_key: creds.key,
+        app_secret: creds.secret,
+        param: [{ pagina: 1, registros_por_pagina: 10, filtrar_por_numero_pedido: String(numeroPedido) }]
+      }
+    })
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(data){
+    if (data && data.nfCadastro && data.nfCadastro.length > 0){
+      return data.nfCadastro.map(function(nf){ return parseInt(nf.ide.nNF,10)||nf.ide.nNF; }).join(', ');
+    }
+    return '';
+  })
+  .catch(function(){ return ''; });
+}
+
+async function gerarTextoRotas(){
+  var selecionados = Object.values(_rotSelecionados);
+  if (!selecionados.length){ alert('Selecione pelo menos uma rota.'); return; }
+
+  var btnGerar = document.getElementById('btn-gt-gerar');
+  btnGerar.disabled = true;
+  btnGerar.textContent = '⏳ Buscando NFs no OMIE...';
+
+  var blocos = [];
+
+  for (var ri = 0; ri < selecionados.length; ri++){
+    var d = selecionados[ri];
+    var paradas = d.paradas || [];
+
+    var nfPromises = paradas.map(function(p){
+      if (!p.pedido) return Promise.resolve('');
+      var emp = p._emp_key || p.empresa || 'MFP';
+      return buscarNFPorPedido(p.pedido, emp);
+    });
+    var nfs = await Promise.all(nfPromises);
+
+    var pesoTotal = paradas.reduce(function(s,p){ return s+(p.peso||0); }, 0);
+    var numPedidos = paradas.map(function(p){ return p.pedido||'—'; })
+      .filter(function(v,i,a){ return v!=='—' && a.indexOf(v)===i; }).join(', ');
+    var nfsUnicas = nfs.filter(function(n,i,a){ return n && a.indexOf(n)===i; }).join(', ');
+
+    var fretoValor = d.freteTotal || 0;
+    var adiantamento = fretoValor > 0 ? fretoValor * 0.70 : 0;
+
+    var pix = d.motoristaPix || '';
+    var pixNome = d.motoristaPixNome || '';
+    if (!pix && d.motoristaId){
+      var mot = (typeof MOTORISTAS !== 'undefined' ? MOTORISTAS : [])
+        .find(function(m){ return String(m.id)===String(d.motoristaId); });
+      if (mot){ pix = mot.pix||''; pixNome = mot.pixNome||''; }
+    }
+
+    var fmt = function(v){ return 'R$ ' + v.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); };
+    var linha = '================================================';
+    var bloco = linha + '\n'
+      + '  ' + d.rotaNome + '\n'
+      + linha + '\n'
+      + 'Motorista: ' + (d.motoristaNome||'') + '\n'
+      + 'Paradas: ' + paradas.length + ' | Peso: ' + pesoTotal + ' kg\n'
+      + 'Frete total: ' + (fretoValor > 0 ? fmt(fretoValor) : '') + '\n'
+      + '\n'
+      + 'Pedidos: ' + (numPedidos||'') + '\n'
+      + 'Notas fiscais: ' + (nfsUnicas||'Não encontrada') + '\n'
+      + 'Adiantamento (70%): ' + (adiantamento > 0 ? fmt(adiantamento) : '') + '\n'
+      + 'PIX: ' + (pix||'') + '\n'
+      + 'Beneficiário: ' + (pixNome||'') + '\n'
+      + linha;
+    blocos.push(bloco);
+  }
+
+  document.getElementById('gt-texto').value = blocos.join('\n\n');
+  document.getElementById('gt-resultado').style.display = 'block';
+  btnGerar.disabled = false;
+  btnGerar.textContent = '🔄 Gerar novamente';
+}
+
+function copiarTextoGerado(){
+  var ta = document.getElementById('gt-texto');
+  ta.select();
+  navigator.clipboard.writeText(ta.value)
+    .then(function(){ toastRot('Texto copiado!','ok'); })
+    .catch(function(){ document.execCommand('copy'); toastRot('Texto copiado!','ok'); });
+}
+
 
 </script>
    
@@ -5754,6 +6072,29 @@ console.log('[OPUS Despacho] Patch carregado!');
 
 <!-- Botão na barra de funções — cole junto dos outros botões da nav -->
 <!-- <button class="btn" onclick="abrirCadastroMotoristas()" title="Cadastro de motoristas">🚗 Motoristas</button> -->
+
+
+<!-- MODAL GERAR TEXTO MOTORISTA -->
+<div class="mo h" id="m-gerar-texto">
+  <div class="mb" style="width:580px;max-height:90vh;overflow-y:auto;">
+    <div class="mt2">📋 Gerar Texto para Motorista</div>
+    <div style="font-size:11px;color:var(--txts);margin-bottom:12px;">Selecione as rotas e clique em Gerar para montar o texto de pagamento.</div>
+
+    <div class="sec">Rotas despachadas hoje</div>
+    <div id="gt-lista" style="margin-bottom:12px;max-height:220px;overflow-y:auto;"></div>
+
+    <div style="display:flex;gap:8px;margin-bottom:12px;">
+      <button class="btn p" id="btn-gt-gerar" onclick="gerarTextoRotas()" style="flex:1;">✨ Gerar Texto</button>
+      <button class="btn" onclick="fModal('m-gerar-texto')" style="flex:1;">Fechar</button>
+    </div>
+
+    <div id="gt-resultado" style="display:none;">
+      <div class="sec">Texto gerado</div>
+      <textarea id="gt-texto" readonly style="width:100%;height:280px;font-family:monospace;font-size:11px;line-height:1.6;background:rgba(15,23,42,.04);border:1px solid var(--glass-border);border-radius:8px;padding:10px;resize:vertical;color:var(--txt);"></textarea>
+      <button class="btn p" onclick="copiarTextoGerado()" style="width:100%;margin-top:8px;">📋 Copiar tudo</button>
+    </div>
+  </div>
+</div>
 
 <!-- MODAL CADASTRO DE MOTORISTAS -->
 <div class="mo h" id="m-motoristas">
@@ -5807,6 +6148,13 @@ console.log('[OPUS Despacho] Patch carregado!');
       <div class="fl"><label>Nº Apólice</label><input type="text" id="mot-apolice" placeholder="000000"/></div>
     </div>
 
+    <!-- PIX -->
+    <div class="sec">Dados para Pagamento (PIX) *</div>
+    <div class="g2">
+      <div class="fl"><label>Chave PIX *</label><input type="text" id="mot-pix" placeholder="CPF, telefone, e-mail ou chave aleatória"/></div>
+      <div class="fl"><label>Nome do Beneficiário *</label><input type="text" id="mot-pix-nome" placeholder="Nome completo do titular"/></div>
+    </div>
+
     <!-- Observações -->
     <div class="fl"><label>Observações</label>
       <input type="text" id="mot-obs" placeholder="Ex: Agrega com fiorino branca, prefere rotas MG"/>
@@ -5824,6 +6172,603 @@ console.log('[OPUS Despacho] Patch carregado!');
 </div>
 
 <!-- Firebase SDKs — cole antes do </body> -->
+
+<script>
+var TG_SIGLAS = ["BHRI", "BHRP", "BHZI", "BHZP", "BSBP", "G01I", "G01P", "G01R", "G02I", "G02P", "G02R", "G03I", "G03P", "G03R", "G04I", "G04P", "G04R", "G05I", "G05P", "G05R", "G06I", "G06P", "G06R", "G07I", "G07P", "G07R", "G08I", "G08P", "G08R", "G09I", "G09P", "G09R", "G10I", "G10P", "G10R", "G11I", "G11P", "G11R", "G12I", "G12P", "G12R", "G13I", "G13P", "G13R", "G14I", "G14P", "G14R", "G15I", "G15P", "G15R", "G16I", "G16P", "G16R", "GUPI", "GUPP", "GYNP", "JFAI", "MT1I", "MT3I", "MT4I", "MT5I", "PTMP", "UBAP", "UDII", "UDIP", "VTAI", "VTAP"];
+var TG_TARIFAS = [[193.63, 207.55, 237.95, 2.37406, 0.003], [193.63, 207.55, 237.95, 2.37406, 0.003], [52.05, 110.19, 132.96, 1.32997, 0.003], [37.16, 47.38, 76.36, 0.75821, 0.003], [55.5, 83.88, 132.72, 1.31754, 0.003], [163.39, 179.02, 207.41, 2.07575, 0.003], [163.39, 179.02, 207.41, 2.07575, 0.003], [163.39, 179.02, 207.41, 2.07575, 0.003], [163.39, 179.02, 207.41, 2.07575, 0.003], [163.39, 179.02, 207.41, 2.07575, 0.003], [163.39, 179.02, 207.41, 2.07575, 0.003], [163.39, 179.02, 207.41, 2.07575, 0.003], [163.39, 179.02, 207.41, 2.07575, 0.003], [163.39, 179.02, 207.41, 2.07575, 0.003], [163.39, 179.02, 207.41, 2.07575, 0.003], [163.39, 179.02, 207.41, 2.07575, 0.003], [163.39, 179.02, 207.41, 2.07575, 0.003], [163.39, 179.02, 207.41, 2.07575, 0.003], [163.39, 179.02, 207.41, 2.07575, 0.003], [163.39, 179.02, 207.41, 2.07575, 0.003], [163.39, 179.02, 207.41, 2.07575, 0.003], [163.39, 179.02, 207.41, 2.07575, 0.003], [163.39, 179.02, 207.41, 2.07575, 0.003], [163.39, 179.02, 207.41, 2.07575, 0.003], [163.39, 179.02, 207.41, 2.07575, 0.003], [163.39, 179.02, 207.41, 2.07575, 0.003], [163.39, 179.02, 207.41, 2.07575, 0.003], [163.39, 179.02, 207.41, 2.07575, 0.003], [163.39, 179.02, 207.41, 2.07575, 0.003], [163.39, 179.02, 207.41, 2.07575, 0.003], [163.39, 179.02, 207.41, 2.07575, 0.003], [163.39, 179.02, 207.41, 2.07575, 0.003], [163.39, 179.02, 207.41, 2.07575, 0.003], [163.39, 179.02, 207.41, 2.07575, 0.003], [163.39, 179.02, 207.41, 2.07575, 0.003], [163.39, 179.02, 207.41, 2.07575, 0.003], [163.39, 179.02, 207.41, 2.07575, 0.003], [163.39, 179.02, 207.41, 2.07575, 0.003], [163.39, 179.02, 207.41, 2.07575, 0.003], [163.39, 179.02, 207.41, 2.07575, 0.003], [163.39, 179.02, 207.41, 2.07575, 0.003], [163.39, 179.02, 207.41, 2.07575, 0.003], [163.39, 179.02, 207.41, 2.07575, 0.003], [163.39, 179.02, 207.41, 2.07575, 0.003], [163.39, 179.02, 207.41, 2.07575, 0.003], [163.39, 179.02, 207.41, 2.07575, 0.003], [163.39, 179.02, 207.41, 2.07575, 0.003], [163.39, 179.02, 207.41, 2.07575, 0.003], [163.39, 179.02, 207.41, 2.07575, 0.003], [163.39, 179.02, 207.41, 2.07575, 0.003], [163.39, 179.02, 207.41, 2.07575, 0.003], [163.39, 179.02, 207.41, 2.07575, 0.003], [163.39, 179.02, 207.41, 2.07575, 0.003], [261.33, 296.34, 331.71, 3.31872, 0.003], [255.36, 280.39, 331.71, 3.31872, 0.003], [68.34, 88.79, 137.27, 1.36726, 0.003], [193.63, 207.55, 237.95, 2.37406, 0.003], [255.36, 280.39, 331.71, 3.31872, 0.005], [255.36, 280.39, 331.71, 3.31872, 0.005], [255.36, 280.39, 331.71, 3.31872, 0.005], [255.36, 280.39, 331.71, 3.31872, 0.005], [123.86, 144.02, 180.82, 1.8023, 0.003], [123.86, 144.02, 180.82, 1.8023, 0.003], [123.86, 144.02, 180.82, 1.8023, 0.003], [37.31, 60.87, 105.11, 1.05652, 0.003], [123.86, 144.02, 180.82, 1.8023, 0.003], [37.31, 60.87, 105.11, 1.05652, 0.003]]; // [r50,r70,r100,excKg,advPct] por sigla
+var TG_CIDADES = [["ABADIA DE GOIAS", "GO", 4, 0, 27], ["ABADIA DOS DOURADOS", "MG", 4, 0, 63], ["ABADIANIA", "GO", 5, 0, 10], ["ABAETE", "MG", 6, 0, 0], ["ABRE CAMPO", "MG", 5, 0, 1], ["ABREULANDIA", "TO", 7, 0, 53], ["ACORIZAL", "MT", 8, 0, 59], ["ACREUNA", "GO", 4, 0, 13], ["ADELANDIA", "GO", 6, 0, 36], ["AFONSO CLAUDIO", "ES", 4, 0, 65], ["AGUA BOA", "MT", 8, 0, 58], ["AGUA DOCE DO NORTE", "ES", 6, 0, 65], ["AGUA FRIA DE GOIAS", "GO", 4, 837, 50], ["AGUA LIMPA", "GO", 5, 0, 25], ["AGUANIL", "MG", 6, 0, 0], ["AGUAS LINDAS DE GOIAS", "GO", 5, 0, 4], ["AGUIA BRANCA", "ES", 4, 0, 65], ["AGUIARNOPOLIS", "TO", 7, 0, 53], ["AIMORES", "MG", 6, 0, 1], ["AIURUOCA", "MG", 7, 0, 0], ["ALBERTINA", "MG", 6, 0, 0], ["ALEGRE", "ES", 6, 0, 65], ["ALEM PARAIBA", "MG", 4, 0, 1], ["ALEXANDRITA", "MG", 5, 0, 63], ["ALEXANIA", "GO", 4, 0, 10], ["ALFENAS", "MG", 6, 0, 0], ["ALFREDO CHAVES", "ES", 5, 0, 65], ["ALFREDO VASCONCELOS", "MG", 5, 0, 0], ["ALIANCA DO TOCANTINS", "TO", 5, 0, 53], ["ALMAS", "TO", 7, 0, 53], ["ALOANDIA", "GO", 4, 0, 28], ["ALPERCATA", "MG", 5, 0, 1], ["ALPINOPOLIS", "MG", 7, 0, 0], ["ALTA FLORESTA", "MT", 10, 0, 59], ["ALTEROSA", "MG", 7, 837, 0], ["ALTO ARAGUAIA", "MT", 7, 0, 59], ["ALTO BOA VISTA", "MT", 8, 0, 59], ["ALTO CAPARAO", "MG", 5, 0, 1], ["ALTO COITE", "MT", 10, 0, 58], ["ALTO GARCAS", "MT", 8, 0, 59], ["ALTO HORIZONTE", "GO", 4, 0, 8], ["ALTO JEQUITIBA", "MG", 8, 0, 1], ["ALTO PARAGUAI", "MT", 8, 0, 59], ["ALTO PARAISO DE GOIAS", "GO", 4, 0, 44], ["ALTO RIO DOCE", "MG", 6, 0, 0], ["ALTO RIO NOVO", "ES", 6, 0, 65], ["ALTO SANTA MARIA", "ES", 7, 0, 65], ["ALTO TAQUARI", "MT", 8, 0, 59], ["ALVINOPOLIS", "MG", 5, 0, 1], ["ALVORADA", "TO", 5, 0, 53], ["ALVORADA DO NORTE", "GO", 4, 0, 44], ["AMARALINA", "GO", 7, 0, 19], ["AMERICANO DO BRASIL", "GO", 6, 0, 36], ["AMORINOPOLIS", "GO", 4, 0, 22], ["ANANAS", "TO", 7, 0, 53], ["ANAPOLIS", "GO", 3, 0, 55], ["ANCHIETA", "ES", 4, 0, 65], ["ANDRADAS", "MG", 6, 0, 0], ["ANDRELANDIA", "MG", 7, 837, 0], ["ANGICO", "TO", 7, 0, 53], ["ANHANGUERA", "GO", 5, 0, 32], ["ANICUNS", "GO", 6, 0, 36], ["ANTONIO CARLOS", "MG", 6, 0, 0], ["ANTONIO DIAS", "MG", 5, 837, 0], ["APARECIDA DE GOIANIA", "GO", 2, 0, 55], ["APARECIDA DE MINAS", "MG", 5, 0, 63], ["APARECIDA DO RIO DOCE", "GO", 5, 0, 31], ["APARECIDA DO RIO NEGRO", "TO", 7, 837, 53], ["APIACA", "ES", 6, 0, 65], ["APIACAS", "MT", 13, 0, 60], ["APORE", "GO", 7, 0, 29], ["ARACRUZ", "ES", 3, 0, 65], ["ARACRUZ COQUEIRAL", "ES", 4, 0, 65], ["ARACRUZ GUARANA", "ES", 4, 0, 65], ["ARACRUZ SANTA CRUZ", "ES", 4, 0, 65], ["ARACU", "GO", 4, 0, 9], ["ARAGARCAS", "GO", 4, 0, 16], ["ARAGOIANIA", "GO", 4, 0, 27], ["ARAGOMINAS", "TO", 7, 0, 53], ["ARAGUACEMA", "TO", 7, 837, 53], ["ARAGUACU", "TO", 7, 0, 53], ["ARAGUAIA", "ES", 5, 0, 65], ["ARAGUAIANA", "MT", 9, 0, 57], ["ARAGUAINA", "TO", 8, 0, 54], ["ARAGUAINHA", "MT", 11, 0, 58], ["ARAGUANA", "TO", 7, 0, 53], ["ARAGUAPAZ", "GO", 4, 0, 22], ["ARAGUARI", "MG", 2, 0, 63], ["ARAGUATINS", "TO", 7, 0, 53], ["ARANTINA", "MG", 7, 0, 0], ["ARAPOEMA", "TO", 7, 837, 53], ["ARAPORA", "MG", 5, 0, 63], ["ARAPUA", "MG", 4, 0, 61], ["ARAPUTANGA", "MT", 7, 0, 59], ["ARAUJOS", "MG", 6, 0, 1], ["ARAXA", "MG", 3, 0, 63], ["ARCEBURGO", "MG", 7, 0, 0], ["ARCOS", "MG", 6, 0, 1], ["AREADO", "MG", 7, 0, 0], ["ARENAPOLIS", "MT", 7, 0, 59], ["ARENOPOLIS", "GO", 5, 0, 22], ["ARIPUANA", "MT", 12, 0, 60], ["ARRAIAS", "TO", 7, 0, 53], ["ARUANA", "GO", 4, 0, 20], ["ASTOLFO DUTRA", "MG", 6, 0, 56], ["ATILIO VIVACQUA", "ES", 6, 0, 65], ["AUGUSTINOPOLIS", "TO", 8, 0, 53], ["AURILANDIA", "GO", 5, 0, 21], ["AURORA DO TOCANTINS", "TO", 8, 0, 53], ["AVELINOPOLIS", "GO", 6, 0, 36], ["AXIXA DO TOCANTINS", "TO", 8, 0, 53], ["AZURITA", "MG", 2, 0, 2], ["BABACULANDIA", "TO", 8, 837, 53], ["BAEPENDI", "MG", 7, 0, 0], ["BAIXO GUANDU", "ES", 4, 0, 65], ["BALIZA", "GO", 7, 0, 14], ["BAMBUI", "MG", 6, 0, 1], ["BANDEIRA DO SUL", "MG", 7, 0, 0], ["BANDEIRANTES DO TOCANTINS", "TO", 8, 837, 53], ["BARAO DE COCAIS", "MG", 6, 0, 1], ["BARAO DE MELGACO", "MT", 9, 0, 59], ["BARAO DE MONTE ALTO", "MG", 6, 0, 1], ["BARBACENA", "MG", 4, 0, 0], ["BARRA DE SAO FRANCISCO", "ES", 3, 0, 65], ["BARRA DO BUGRES", "MT", 7, 0, 59], ["BARRA DO GARCAS", "MT", 7, 0, 58], ["BARRA DO ITAPEMIRIM", "ES", 4, 0, 65], ["BARRA DO OURO", "TO", 8, 837, 53], ["BARRO ALTO", "GO", 4, 0, 10], ["BARROLANDIA", "TO", 5, 0, 53], ["BARROSO", "MG", 4, 0, 0], ["BELA VISTA DE GOIAS", "GO", 4, 0, 24], ["BELO HORIZONTE", "MG", 1, 0, 3], ["BELO ORIENTE", "MG", 5, 837, 1], ["BERNARDO SAYAO", "TO", 8, 837, 53], ["BETIM", "MG", 1, 0, 3], ["BICAS", "MG", 4, 0, 56], ["BIQUINHAS", "MG", 6, 0, 0], ["BOA ESPERANCA", "ES", 6, 0, 65], ["BOA ESPERANCA", "MG", 7, 0, 0], ["BOCAIUVA", "MG", 9, 0, 0], ["BOM DESPACHO", "MG", 6, 0, 1], ["BOM JARDIM DE GOIAS", "GO", 4, 0, 14], ["BOM JESUS", "GO", 4, 0, 26], ["BOM JESUS DA PENHA", "MG", 7, 0, 0], ["BOM JESUS DO ARAGUAIA", "MT", 11, 0, 60], ["BOM JESUS DO GALHO", "MG", 6, 837, 1], ["BOM JESUS DO NORTE", "ES", 6, 0, 65], ["BOM JESUS DO TOCANTINS", "TO", 3, 0, 53], ["BOM REPOUSO", "MG", 6, 0, 0], ["BOM SUCESSO", "MG", 6, 0, 1], ["BONFIM", "MG", 6, 0, 0], ["BONFINOPOLIS", "GO", 4, 0, 24], ["BONOPOLIS", "GO", 7, 0, 17], ["BORDA DA MATA", "MG", 6, 0, 0], ["BOTELHOS", "MG", 6, 0, 0], ["BRASILANDIA DO TOCANTINS", "TO", 5, 0, 53], ["BRASILIA", "DF", 2, 0, 4], ["BRASILIA CEILANDIA", "DF", 2, 0, 4], ["BRASILIA CRUZEIRO", "DF", 2, 0, 4], ["BRASILIA GUARA", "DF", 2, 0, 4], ["BRASILIA TAGUATINGA", "DF", 2, 0, 4], ["BRASILIA DE MINAS", "MG", 9, 0, 0], ["BRASNORTE", "MT", 9, 0, 60], ["BRAZABRANTES", "GO", 4, 0, 9], ["BRAZLANDIA", "DF", 5, 0, 4], ["BRAZOPOLIS", "MG", 6, 0, 0], ["BREJETUBA", "ES", 7, 0, 65], ["BREJINHO DE NAZARE", "TO", 8, 837, 53], ["BREJO BONITO", "MG", 5, 0, 61], ["BRITANIA", "GO", 4, 0, 11], ["BRUMADINHO", "MG", 4, 0, 1], ["BUENO BRANDAO", "MG", 6, 0, 0], ["BUENOPOLIS", "MG", 8, 0, 0], ["BURITI ALEGRE", "GO", 4, 0, 28], ["BURITI DE GOIAS", "GO", 7, 0, 36], ["BURITI DO TOCANTINS", "TO", 8, 0, 53], ["BURITINOPOLIS", "GO", 4, 0, 44], ["BURITIZEIRO", "MG", 8, 0, 0], ["CABECEIRAS", "GO", 7, 0, 44], ["CABO VERDE", "MG", 7, 0, 0], ["CACERES", "MT", 7, 0, 59], ["CACHOEIRA ALTA", "GO", 4, 0, 31], ["CACHOEIRA DA PRATA", "MG", 6, 0, 2], ["CACHOEIRA DE GOIAS", "GO", 5, 0, 21], ["CACHOEIRA DE MINAS", "MG", 6, 0, 0], ["CACHOEIRA DOURADA", "GO", 4, 0, 26], ["CACHOEIRINHA", "TO", 8, 0, 53], ["CACHOEIRO DE ITAPEMIRIM", "ES", 3, 0, 65], ["CACU", "GO", 4, 0, 31], ["CAETANOPOLIS", "MG", 6, 837, 2], ["CAETE", "MG", 3, 0, 1], ["CAIANA", "MG", 6, 0, 1], ["CAIAPONIA", "GO", 4, 0, 20], ["CALCILANDIA", "GO", 7, 837, 13], ["CALDAS", "MG", 6, 0, 0], ["CALDAS NOVAS", "GO", 4, 0, 25], ["CALDAZINHA", "GO", 4, 0, 24], ["CAMACHO", "MG", 8, 0, 0], ["CAMANDUCAIA", "MG", 6, 837, 0], ["CAMBUI", "MG", 6, 0, 0], ["CAMBUQUIRA", "MG", 6, 0, 0], ["CAMPANARIO", "MG", 5, 0, 1], ["CAMPANHA", "MG", 6, 0, 0], ["CAMPESTRE", "MG", 6, 0, 0], ["CAMPESTRE DE GOIAS", "GO", 6, 0, 36], ["CAMPINA VERDE", "MG", 4, 0, 63], ["CAMPINACU", "GO", 4, 0, 17], ["CAMPINAPOLIS", "MT", 10, 0, 58], ["CAMPINORTE", "GO", 4, 0, 8], ["CAMPO ALEGRE DE GOIAS", "GO", 4, 0, 32], ["CAMPO BELO", "MG", 4, 0, 1], ["CAMPO DO MEIO", "MG", 7, 0, 0], ["CAMPO LIMPO DE GOIAS", "GO", 4, 0, 7], ["CAMPO NOVO DO PARECIS", "MT", 7, 0, 59], ["CAMPO VERDE", "MT", 8, 0, 58], ["CAMPOS ALTOS", "MG", 5, 0, 61], ["CAMPOS BELOS", "GO", 4, 0, 44], ["CAMPOS DE JULIO", "MT", 7, 0, 60], ["CAMPOS GERAIS", "MG", 7, 0, 0], ["CAMPOS LINDOS", "TO", 8, 837, 53], ["CAMPOS VERDES", "GO", 5, 0, 8], ["CANA BRAVA", "TO", 8, 0, 53], ["CANA VERDE", "MG", 6, 0, 1], ["CANABRAVA DO NORTE", "MT", 10, 0, 59], ["CANAPOLIS", "MG", 5, 0, 63], ["CANARANA", "MT", 8, 0, 58], ["CANDANGOLANDIA", "DF", 2, 0, 4], ["CANDEIAS", "MG", 7, 0, 2], ["CAPARAO", "MG", 7, 0, 1], ["CAPELA NOVA", "MG", 6, 0, 0], ["CAPELINHA", "MG", 7, 0, 1], ["CAPETINGA", "MG", 7, 0, 0], ["CAPIM BRANCO", "MG", 3, 0, 1], ["CAPINOPOLIS", "MG", 6, 0, 63], ["CAPITAO ANDRADE", "MG", 5, 0, 1], ["CAPITAO ENEAS", "MG", 7, 0, 0], ["CAPITOLIO", "MG", 6, 0, 0], ["CAPUTIRA", "MG", 5, 0, 1], ["CARANDAI", "MG", 6, 0, 0], ["CARANGOLA", "MG", 5, 0, 1], ["CARATINGA", "MG", 5, 0, 1], ["CAREACU", "MG", 6, 0, 0], ["CARIACICA", "ES", 1, 0, 66], ["CARIRI DO TOCANTINS", "TO", 5, 0, 53], ["CARLINDA", "MT", 13, 0, 60], ["CARMO DA CACHOEIRA", "MG", 7, 0, 0], ["CARMO DA MATA", "MG", 4, 0, 1], ["CARMO DE MINAS", "MG", 7, 0, 0], ["CARMO DO CAJURU", "MG", 3, 0, 2], ["CARMO DO PARANAIBA", "MG", 5, 0, 61], ["CARMO DO RIO CLARO", "MG", 7, 0, 0], ["CARMO DO RIO VERDE", "GO", 4, 0, 10], ["CARMOLANDIA", "TO", 8, 837, 53], ["CARMOPOLIS DE MINAS", "MG", 4, 0, 1], ["CARNEIRINHO", "MG", 5, 0, 63], ["CARRANCAS", "MG", 6, 0, 0], ["CARRASCO BONITO", "TO", 8, 837, 53], ["CARTUCHO", "TO", 8, 0, 53], ["CARVALHOPOLIS", "MG", 7, 0, 0], ["CARVALHOS", "MG", 7, 0, 0], ["CASEARA", "TO", 7, 837, 53], ["CASSIA", "MG", 7, 0, 0], ["CASTANHEIRA", "MT", 11, 0, 60], ["CASTELANDIA", "GO", 5, 0, 11], ["CASTELO", "ES", 6, 0, 65], ["CATAGUASES", "MG", 6, 0, 1], ["CATALAO", "GO", 4, 0, 32], ["CATAS ALTAS DA NORUEGA", "MG", 4, 0, 1], ["CATURAI", "GO", 4, 0, 9], ["CAVALCANTE", "GO", 4, 0, 44], ["CAXAMBU", "MG", 7, 0, 0], ["CEDRO DO ABAETE", "MG", 6, 0, 0], ["CENTENARIO", "TO", 7, 837, 53], ["CENTRALINA", "MG", 5, 0, 63], ["CERES", "GO", 4, 0, 10], ["CEZARINA", "GO", 4, 0, 27], ["CHALE", "MG", 7, 0, 1], ["CHAPADA DA NATIVIDADE", "TO", 4, 0, 53], ["CHAPADA DE AREIA", "TO", 8, 837, 53], ["CHAPADA DOS GUIMARAES", "MT", 8, 0, 59], ["CHAPADAO DO CEU", "GO", 4, 0, 14], ["CHAVESLANDIA", "MG", 7, 837, 63], ["CIDADE OCIDENTAL", "GO", 3, 0, 4], ["CIPOTANEA", "MG", 6, 0, 0], ["CLAUDIA", "MT", 11, 0, 60], ["CLAUDIO", "MG", 6, 837, 1], ["COCALINHO", "MT", 11, 0, 58], ["COCALZINHO DE GOIAS", "GO", 4, 0, 7], ["COIMBRA", "MG", 5, 0, 56], ["COLATINA", "ES", 3, 0, 65], ["COLIDER", "MT", 10, 0, 60], ["COLINAS DO SUL", "GO", 10, 0, 8], ["COLINAS DO TOCANTINS", "TO", 5, 0, 53], ["COLMEIA", "TO", 7, 0, 53], ["COLNIZA", "MT", 13, 0, 60], ["COMBINADO", "TO", 6, 0, 53], ["COMENDADOR GOMES", "MG", 5, 0, 63], ["COMODORO", "MT", 7, 0, 60], ["CONCEICAO DA APARECIDA", "MG", 7, 0, 0], ["CONCEICAO DA BARRA", "ES", 6, 0, 65], ["CONCEICAO DA BARRA DE MINAS", "MG", 6, 0, 0], ["CONCEICAO DAS ALAGOAS", "MG", 4, 0, 63], ["CONCEICAO DAS PEDRAS", "MG", 6, 0, 0], ["CONCEICAO DE IPANEMA", "MG", 5, 0, 1], ["CONCEICAO DO CASTELO", "ES", 5, 0, 65], ["CONCEICAO DO PARA", "MG", 3, 0, 2], ["CONCEICAO DO RIO VERDE", "MG", 6, 0, 0], ["CONCEICAO DO TOCANTINS", "TO", 5, 0, 53], ["CONCEICAO DOS OUROS", "MG", 6, 0, 0], ["CONFINS", "MG", 2, 0, 2], ["CONFRESA", "MT", 8, 0, 59], ["CONGONHAL", "MG", 6, 0, 0], ["CONGONHAS", "MG", 3, 0, 56], ["CONQUISTA", "MG", 4, 0, 63], ["CONQUISTA D OESTE", "MT", 7, 0, 60], ["CONSELHEIRO LAFAIETE", "MG", 3, 0, 56], ["CONSELHEIRO PENA", "MG", 6, 0, 1], ["CONSOLACAO", "MG", 6, 0, 0], ["CONTAGEM", "MG", 1, 0, 3], ["COQUEIRAL", "MG", 7, 0, 0], ["CORACAO DE JESUS", "MG", 8, 0, 0], ["CORDISLANDIA", "MG", 7, 0, 0], ["COROMANDEL", "MG", 4, 0, 63], ["CORONEL FABRICIANO", "MG", 5, 0, 1], ["CORONEL PACHECO", "MG", 5, 0, 1], ["CORREGO DO BOM JESUS", "MG", 6, 0, 0], ["CORREGO DO OURO", "GO", 7, 0, 36], ["CORREGO FUNDO", "MG", 7, 0, 1], ["CORUMBA DE GOIAS", "GO", 4, 0, 10], ["CORUMBAIBA", "GO", 4, 0, 23], ["COTRIGUACU", "MT", 13, 0, 60], ["COUTO DE MAGALHAES", "TO", 8, 0, 53], ["CRAOLANDIA", "TO", 8, 0, 53], ["CRISTAIS", "MG", 7, 0, 0], ["CRISTALANDIA", "TO", 7, 0, 53], ["CRISTALINA", "GO", 4, 0, 8], ["CRISTIANOPOLIS", "GO", 5, 0, 24], ["CRISTINA", "MG", 7, 0, 0], ["CRIXAS", "GO", 4, 0, 8], ["CRIXAS", "TO", 3, 0, 53], ["CRIXAS DO TOCANTINS", "TO", 5, 0, 53], ["CROMINIA", "GO", 4, 0, 27], ["CRUCILANDIA", "MG", 6, 0, 0], ["CRUZEIRO DA FORTALEZA", "MG", 5, 0, 61], ["CRUZILIA", "MG", 7, 0, 0], ["CUIABA", "MT", 7, 0, 58], ["CUMARI", "GO", 5, 0, 32], ["CURVELANDIA", "MT", 7, 0, 59], ["CURVELO", "MG", 5, 0, 0], ["DAMIANOPOLIS", "GO", 5, 0, 44], ["DAMOLANDIA", "GO", 4, 0, 10], ["DARCINOPOLIS", "TO", 8, 837, 53], ["DAVINOPOLIS", "GO", 7, 0, 32], ["DELFIM MOREIRA", "MG", 6, 0, 0], ["DELTA", "MG", 4, 0, 63], ["DENISE", "MT", 7, 0, 59], ["DESCOBERTO", "MG", 5, 0, 56], ["DESTERRO DO MELO", "MG", 6, 0, 0], ["DIAMANTINA", "MG", 5, 0, 0], ["DIAMANTINO", "MT", 7, 0, 59], ["DIANOPOLIS", "TO", 4, 0, 54], ["DIORAMA", "GO", 4, 0, 22], ["DIVINESIA", "MG", 8, 0, 0], ["DIVINO", "MG", 5, 0, 1], ["DIVINO DE SAO LOURENCO", "ES", 5, 0, 65], ["DIVINOPOLIS", "MG", 3, 0, 3], ["DIVINOPOLIS DE GOIAS", "GO", 4, 0, 44], ["DIVINOPOLIS DO TOCANTINS", "TO", 7, 837, 53], ["DIVISA NOVA", "MG", 6, 0, 1], ["DOIS IRMAOS DO TOCANTINS", "TO", 7, 837, 53], ["DOM AQUINO", "MT", 9, 0, 58], ["DOM CAVATI", "MG", 6, 0, 1], ["DOM VICOSO", "MG", 7, 0, 0], ["DOMINGOS MARTINS", "ES", 3, 0, 65], ["DONA EUZEBIA", "MG", 5, 0, 0], ["DORES DE CAMPOS", "MG", 4, 0, 0], ["DORES DO INDAIA", "MG", 6, 0, 0], ["DORES DO RIO PRETO", "ES", 6, 0, 65], ["DOURADOQUARA", "MG", 5, 0, 63], ["DOVERLANDIA", "GO", 4, 0, 20], ["DUERE", "TO", 7, 0, 53], ["DURANDE", "MG", 6, 0, 1], ["ECOPORANGA", "ES", 5, 0, 65], ["EDEALINA", "GO", 4, 0, 28], ["EDEIA", "GO", 4, 0, 28], ["ELOI MENDES", "MG", 7, 0, 0], ["ENGENHEIRO CALDAS", "MG", 6, 0, 1], ["ENGENHEIRO NAVARRO", "MG", 9, 837, 1], ["ENTRE FOLHAS", "MG", 6, 0, 1], ["ERVALIA", "MG", 6, 0, 56], ["ESMERALDAS", "MG", 5, 0, 2], ["ESPERA FELIZ", "MG", 5, 0, 1], ["ESPERANTINA", "TO", 8, 837, 53], ["ESPINOSA", "MG", 9, 0, 0], ["ESPIRITO SANTO DO DOURADO", "MG", 7, 837, 0], ["ESTIVA", "MG", 6, 0, 0], ["ESTRELA DALVA", "MG", 7, 0, 0], ["ESTRELA DO INDAIA", "MG", 6, 0, 0], ["ESTRELA DO NORTE", "GO", 4, 0, 19], ["ESTRELA DO SUL", "MG", 4, 0, 63], ["EUGENOPOLIS", "MG", 5, 0, 1], ["EXTREMA", "MG", 6, 0, 0], ["FAINA", "GO", 4, 0, 22], ["FAMA", "MG", 6, 837, 0], ["FATIMA", "TO", 5, 0, 53], ["FAZENDA NOVA", "GO", 4, 0, 11], ["FELIXLANDIA", "MG", 8, 0, 0], ["FELIZ NATAL", "MT", 11, 0, 60], ["FERNANDES TOURINHO", "MG", 6, 0, 1], ["FERVEDOURO", "MG", 5, 0, 1], ["FIGUEIROPOLIS", "TO", 5, 0, 53], ["FIGUEIROPOLIS D OESTE", "MT", 7, 0, 59], ["FILADELFIA", "TO", 8, 837, 53], ["FIRMINOPOLIS", "GO", 4, 0, 21], ["FLORES DE GOIAS", "GO", 4, 0, 44], ["FLORESTAL", "MG", 5, 0, 1], ["FORMIGA", "MG", 6, 0, 1], ["FORMOSA", "GO", 6, 0, 44], ["FORMOSO", "GO", 4, 0, 17], ["FORMOSO DO ARAGUAIA", "TO", 7, 0, 53], ["FORTALEZA DE MINAS", "MG", 7, 0, 0], ["FREI INOCENCIO", "MG", 6, 0, 0], ["FRONTEIRA", "MG", 5, 0, 63], ["FRUTAL", "MG", 3, 0, 63], ["FUNDAO", "ES", 3, 0, 65], ["FUNILANDIA", "MG", 8, 0, 0], ["GAMA", "DF", 2, 0, 4], ["GAMELEIRA DE GOIAS", "GO", 5, 0, 24], ["GAUCHA DO NORTE", "MT", 8, 0, 58], ["GENERAL CARNEIRO", "MT", 9, 0, 58], ["GLAUCILANDIA", "MG", 8, 837, 0], ["GLORIA D OESTE", "MT", 8, 0, 59], ["GOIABEIRA", "MG", 7, 837, 1], ["GOIANA", "MG", 5, 0, 56], ["GOIANAPOLIS", "GO", 4, 0, 55], ["GOIANDIRA", "GO", 5, 0, 32], ["GOIANESIA", "GO", 4, 0, 10], ["GOIANIA", "GO", 2, 0, 55], ["GOIANIRA", "GO", 4, 0, 55], ["GOIANORTE", "TO", 7, 0, 53], ["GOIAS", "GO", 4, 0, 13], ["GOIATINS", "TO", 8, 837, 53], ["GOIATUBA", "GO", 4, 0, 28], ["GONCALVES", "MG", 6, 0, 0], ["GOUVEIA", "MG", 6, 0, 1], ["GOUVELANDIA", "GO", 4, 0, 26], ["GOVERNADOR LINDENBERG", "ES", 6, 0, 65], ["GOVERNADOR VALADARES", "MG", 5, 0, 1], ["GUACUI", "ES", 6, 0, 65], ["GUANHAES", "MG", 5, 0, 1], ["GUAPE", "MG", 7, 0, 0], ["GUAPO", "GO", 4, 0, 27], ["GUARAI", "TO", 7, 0, 53], ["GUARAITA", "GO", 4, 0, 13], ["GUARANESIA", "MG", 7, 0, 0], ["GUARANI", "MG", 5, 0, 56], ["GUARANI DE GOIAS", "GO", 4, 0, 44], ["GUARANTA DO NORTE", "MT", 9, 0, 60], ["GUARAPARI", "ES", 3, 0, 66], ["GUARARA", "MG", 5, 0, 56], ["GUARDA MOR", "MG", 5, 0, 61], ["GUARINOS", "GO", 5, 0, 10], ["GUAXUPE", "MG", 7, 0, 0], ["GUIDOVAL", "MG", 5, 0, 1], ["GUIMARANIA", "MG", 3, 0, 61], ["GUIRATINGA", "MT", 9, 0, 58], ["GUIRICEMA", "MG", 5, 0, 56], ["GURINHATA", "MG", 5, 837, 63], ["GURUPI", "TO", 5, 0, 54], ["HEITORAI", "GO", 7, 0, 13], ["HELIODORA", "MG", 6, 0, 0], ["HIDROLANDIA", "GO", 5, 0, 24], ["HIDROLINA", "GO", 4, 0, 8], ["IACIARA", "GO", 4, 0, 44], ["IAPU", "MG", 6, 0, 1], ["IBATIBA", "ES", 4, 0, 65], ["IBIA", "MG", 3, 0, 61], ["IBIRACI", "MG", 7, 0, 0], ["IBIRACU", "ES", 3, 0, 65], ["IBIRITE", "MG", 2, 0, 2], ["IBITIRAMA", "ES", 5, 0, 65], ["IBITIURA DE MINAS", "MG", 6, 0, 0], ["IBITURUNA", "MG", 7, 0, 0], ["ICONHA", "ES", 3, 0, 65], ["IGARAPE", "MG", 2, 0, 2], ["IGARATINGA", "MG", 3, 0, 2], ["IGUATAMA", "MG", 8, 0, 1], ["IJACI", "MG", 6, 0, 0], ["ILICINEA", "MG", 7, 0, 0], ["IMBE DE MINAS", "MG", 6, 0, 1], ["INACIOLANDIA", "GO", 4, 0, 26], ["INCONFIDENTES", "MG", 6, 0, 0], ["INDIANAPOLIS", "MT", 7, 0, 58], ["INDIANOPOLIS", "MG", 3, 0, 63], ["INDIARA", "GO", 4, 0, 27], ["INDIAVAI", "MT", 7, 0, 59], ["INHAPIM", "MG", 5, 0, 1], ["INHAUMA", "MG", 6, 0, 1], ["INHUMAS", "GO", 4, 0, 10], ["IPABA", "MG", 5, 837, 1], ["IPAMERI", "GO", 4, 0, 34], ["IPANEMA", "MG", 5, 0, 1], ["IPATINGA", "MG", 5, 0, 1], ["IPIACU", "MG", 5, 0, 63], ["IPIRANGA DE GOIAS", "GO", 4, 0, 10], ["IPIRANGA DO NORTE", "MT", 13, 0, 60], ["IPORA", "GO", 4, 0, 22], ["IPUEIRAS", "TO", 7, 837, 53], ["IPUIUNA", "MG", 4, 837, 0], ["IRAI DE MINAS", "MG", 3, 0, 63], ["IRUPI", "ES", 4, 0, 65], ["ISRAELANDIA", "GO", 4, 0, 22], ["ITABERAI", "GO", 4, 0, 13], ["ITABIRA", "MG", 5, 0, 1], ["ITABIRITO", "MG", 4, 0, 56], ["ITACAJA", "TO", 8, 837, 53], ["ITACARAMBI", "MG", 9, 0, 0], ["ITAGUACU", "ES", 4, 0, 65], ["ITAGUARA", "MG", 5, 0, 1], ["ITAGUARI", "GO", 5, 0, 13], ["ITAGUARU", "GO", 4, 0, 13], ["ITAGUATINS", "TO", 8, 837, 53], ["ITAIPAVA", "ES", 6, 0, 65], ["ITAJA", "GO", 4, 0, 29], ["ITAJUBA", "MG", 6, 0, 0], ["ITAMARANDIBA", "MG", 7, 0, 0], ["ITAMBACURI", "MG", 8, 837, 0], ["ITAMBE DO MATO DENTRO", "MG", 7, 0, 0], ["ITAMOGI", "MG", 7, 0, 0], ["ITAMONTE", "MG", 7, 0, 0], ["ITANHANDU", "MG", 7, 0, 0], ["ITANHANGA", "MT", 12, 0, 60], ["ITANHOMI", "MG", 6, 0, 1], ["ITAPACI", "GO", 4, 0, 10], ["ITAPAGIPE", "MG", 4, 0, 63], ["ITAPECERICA", "MG", 5, 0, 1], ["ITAPEMIRIM", "ES", 6, 0, 65], ["ITAPEVA", "MG", 6, 0, 0], ["ITAPIRAPUA", "GO", 4, 0, 11], ["ITAPIRATINS", "TO", 8, 837, 53], ["ITAPORA DO TOCANTINS", "TO", 7, 0, 53], ["ITAPURANGA", "GO", 4, 0, 13], ["ITARANA", "ES", 4, 0, 65], ["ITARUMA", "GO", 4, 0, 31], ["ITATIAIUCU", "MG", 4, 0, 2], ["ITAU DE MINAS", "MG", 7, 0, 0], ["ITAUBA", "MT", 9, 0, 60], ["ITAUCU", "GO", 4, 0, 12], ["ITAUNA", "MG", 3, 0, 3], ["ITIQUIRA", "MT", 10, 0, 58], ["ITUIUTABA", "MG", 3, 0, 63], ["ITUMBIARA", "GO", 4, 0, 26], ["ITUMIRIM", "MG", 7, 0, 0], ["ITURAMA", "MG", 4, 0, 63], ["ITUTINGA", "MG", 7, 0, 0], ["IUNA", "ES", 4, 0, 65], ["IVOLANDIA", "GO", 4, 0, 21], ["JABOTICATUBAS", "MG", 4, 0, 1], ["JACIARA", "MT", 7, 0, 59], ["JACUI", "MG", 7, 0, 0], ["JACUTINGA", "MG", 6, 0, 0], ["JAGUARE", "ES", 6, 0, 65], ["JAIBA", "MG", 9, 0, 0], ["JAMPRUCA", "MG", 6, 0, 0], ["JANAUBA", "MG", 9, 0, 0], ["JANDAIA", "GO", 4, 0, 15], ["JANGADA", "MT", 7, 0, 59], ["JANUARIA", "MG", 9, 0, 0], ["JAPARAIBA", "MG", 6, 0, 0], ["JAPONVAR", "MG", 9, 0, 0], ["JARAGUA", "GO", 4, 0, 10], ["JATAI", "GO", 4, 0, 16], ["JAU DO TOCANTINS", "TO", 7, 0, 53], ["JAUPACI", "GO", 4, 0, 22], ["JAURU", "MT", 7, 0, 60], ["JEQUERI", "MG", 6, 0, 1], ["JEQUITAI", "MG", 8, 0, 0], ["JERONIMO MONTEIRO", "ES", 6, 0, 65], ["JESUANIA", "MG", 7, 0, 0], ["JESUPOLIS", "GO", 4, 0, 9], ["JOAO MONLEVADE", "MG", 4, 0, 1], ["JOAO NEIVA", "ES", 3, 0, 65], ["JOAO PINHEIRO", "MG", 4, 0, 1], ["JOAQUIM FELICIO", "MG", 8, 0, 0], ["JOVIANIA", "GO", 4, 0, 28], ["JUARA", "MT", 10, 0, 60], ["JUARINA", "TO", 8, 837, 53], ["JUATUBA", "MG", 3, 0, 2], ["JUINA", "MT", 9, 0, 60], ["JUIZ DE FORA", "MG", 4, 0, 0], ["JURUAIA", "MG", 7, 0, 0], ["JURUENA", "MT", 11, 0, 60], ["JUSCIMEIRA", "MT", 8, 0, 58], ["JUSSARA", "GO", 4, 0, 11], ["LAGAMAR", "MG", 4, 0, 61], ["LAGO NORTE", "DF", 2, 0, 4], ["LAGO SUL", "DF", 2, 0, 4], ["LAGOA DA CONFUSAO", "TO", 7, 0, 53], ["LAGOA DA PRATA", "MG", 5, 0, 1], ["LAGOA DO TOCANTINS", "TO", 7, 837, 53], ["LAGOA DOURADA", "MG", 5, 0, 0], ["LAGOA FORMOSA", "MG", 3, 0, 61], ["LAGOA GRANDE", "MG", 4, 0, 61], ["LAGOA SANTA", "GO", 5, 0, 29], ["LAGOA SANTA", "MG", 1, 0, 3], ["LAJEADO", "TO", 7, 837, 53], ["LAJINHA", "MG", 6, 0, 1], ["LAMBARI", "MG", 7, 0, 0], ["LAMBARI D OESTE", "MT", 7, 0, 59], ["LARANJA DA TERRA", "ES", 6, 0, 65], ["LARANJAL", "MG", 2, 0, 1], ["LAVANDEIRA", "TO", 7, 837, 53], ["LAVRAS", "MG", 7, 0, 0], ["LEANDRO FERREIRA", "MG", 6, 0, 2], ["LEOPOLDINA", "MG", 5, 0, 1], ["LEOPOLDO DE BULHOES", "GO", 4, 0, 24], ["LIMEIRA DO OESTE", "MG", 6, 0, 63], ["LINHARES", "ES", 3, 0, 65], ["LIZARDA", "TO", 8, 837, 53], ["LONTRA", "MG", 9, 0, 0], ["LUCAS DO RIO VERDE", "MT", 9, 0, 59], ["LUCIARA", "MT", 11, 0, 59], ["LUISBURGO", "MG", 6, 0, 1], ["LUISLANDIA", "MG", 8, 0, 0], ["LUZ", "MG", 10, 0, 1], ["LUZIANIA", "GO", 3, 0, 4], ["LUZINOPOLIS", "TO", 8, 0, 53], ["MACHADO", "MG", 6, 0, 0], ["MAIRIPOTABA", "GO", 4, 0, 27], ["MAMBAI", "GO", 4, 0, 44], ["MANGA", "MG", 9, 837, 0], ["MANHUACU", "MG", 8, 0, 1], ["MANHUMIRIM", "MG", 8, 0, 1], ["MANTENA", "MG", 5, 0, 65], ["MANTENOPOLIS", "ES", 6, 0, 65], ["MAR DE ESPANHA", "MG", 5, 0, 56], ["MARA ROSA", "GO", 4, 0, 19], ["MARATAIZES", "ES", 6, 0, 65], ["MARAVILHAS", "MG", 5, 0, 0], ["MARCELANDIA", "MT", 11, 0, 60], ["MARECHAL FLORIANO", "ES", 3, 0, 65], ["MARIA DA FE", "MG", 6, 0, 0], ["MARIANA", "MG", 4, 0, 1], ["MARIANOPOLIS DO TOCANTINS", "TO", 7, 837, 53], ["MARILAC", "MG", 6, 0, 0], ["MARILANDIA", "ES", 6, 0, 65], ["MARIO CAMPOS", "MG", 3, 0, 2], ["MARIPA DE MINAS", "MG", 5, 0, 1], ["MARTINHO CAMPOS", "MG", 9, 0, 0], ["MARTINS SOARES", "MG", 5, 0, 1], ["MARZAGAO", "GO", 4, 0, 25], ["MATEIROS", "TO", 8, 837, 53], ["MATEUS LEME", "MG", 3, 0, 2], ["MATHIAS LOBATO", "MG", 6, 0, 0], ["MATIAS BARBOSA", "MG", 5, 0, 56], ["MATIAS CARDOSO", "MG", 8, 837, 0], ["MATIPO", "MG", 6, 0, 1], ["MATO VERDE", "MG", 9, 0, 0], ["MATOZINHOS", "MG", 2, 0, 2], ["MATRINCHA", "GO", 4, 0, 11], ["MATUPA", "MT", 10, 0, 60], ["MATUTINA", "MG", 5, 0, 61], ["MAURILANDIA", "GO", 4, 0, 11], ["MAURILANDIA DO TOCANTINS", "TO", 8, 837, 53], ["MIMOSO DE GOIAS", "GO", 5, 837, 50], ["MIMOSO DO SUL", "ES", 6, 0, 65], ["MINACU", "GO", 4, 0, 17], ["MINDURI", "MG", 7, 0, 0], ["MINEIROS", "GO", 4, 0, 14], ["MIRABELA", "MG", 9, 0, 0], ["MIRACEMA DO TOCANTINS", "TO", 7, 0, 53], ["MIRADOURO", "MG", 4, 0, 1], ["MIRAI", "MG", 2, 0, 1], ["MIRANORTE", "TO", 5, 0, 53], ["MIRASSOL D OESTE", "MT", 7, 0, 59], ["MOEDA", "MG", 4, 0, 1], ["MOIPORA", "GO", 4, 0, 21], ["MONSENHOR PAULO", "MG", 6, 0, 0], ["MONTALVANIA", "MG", 9, 837, 0], ["MONTANHA", "ES", 5, 0, 65], ["MONTE ALEGRE DE GOIAS", "GO", 4, 0, 44], ["MONTE ALEGRE DE MINAS", "MG", 3, 0, 63], ["MONTE AZUL", "MG", 9, 0, 0], ["MONTE BELO", "MG", 7, 0, 0], ["MONTE CARMELO", "MG", 3, 0, 61], ["MONTE DO CARMO", "TO", 7, 0, 53], ["MONTE SANTO DE MINAS", "MG", 7, 0, 0], ["MONTE SANTO DO TOCANTINS", "TO", 7, 0, 53], ["MONTE SIAO", "MG", 6, 0, 0], ["MONTES CLAROS", "MG", 4, 0, 0], ["MONTES CLAROS DE GOIAS", "GO", 4, 0, 12], ["MONTIVIDIU", "GO", 4, 0, 11], ["MONTIVIDIU DO NORTE", "GO", 5, 0, 17], ["MORADA NOVA DE MINAS", "MG", 8, 0, 1], ["MORRINHOS", "GO", 4, 0, 25], ["MORRO AGUDO DE GOIAS", "GO", 4, 0, 11], ["MOSSAMEDES", "GO", 6, 0, 36], ["MOZARLANDIA", "GO", 4, 0, 20], ["MUCURICI", "ES", 6, 0, 65], ["MUNDO NOVO", "GO", 4, 0, 17], ["MUNHOZ", "MG", 6, 0, 0], ["MUNIZ FREIRE", "ES", 5, 0, 65], ["MUQUI", "ES", 6, 0, 65], ["MURIAE", "MG", 4, 0, 1], ["MURICILANDIA", "TO", 8, 0, 53], ["MUTUM", "MG", 5, 0, 1], ["MUTUNOPOLIS", "GO", 4, 0, 17], ["MUZAMBINHO", "MG", 7, 0, 0], ["NANUQUE", "MG", 10, 837, 1], ["NAQUE", "MG", 8, 837, 1], ["NATAL", "TO", 8, 0, 53], ["NATERCIA", "MG", 6, 0, 0], ["NATIVIDADE", "TO", 7, 0, 53], ["NAZARE", "TO", 8, 837, 53], ["NAZARENO", "MG", 7, 0, 0], ["NAZARIO", "GO", 6, 0, 36], ["NEPOMUCENO", "MG", 5, 0, 1], ["NEROPOLIS", "GO", 4, 0, 10], ["NIQUELANDIA", "GO", 4, 0, 8], ["NOBRES", "MT", 7, 0, 59], ["NORTELANDIA", "MT", 7, 0, 59], ["NOSSA SENHORA DO LIVRAMENTO", "MT", 10, 0, 59], ["NOVA AMERICA", "GO", 5, 0, 10], ["NOVA AURORA", "GO", 7, 0, 32], ["NOVA BANDEIRANTES", "MT", 15, 0, 60], ["NOVA BRASILANDIA", "MT", 12, 0, 59], ["NOVA CANAA DO NORTE", "MT", 9, 0, 60], ["NOVA CRIXAS", "GO", 4, 0, 17], ["NOVA ERA", "MG", 5, 0, 1], ["NOVA GLORIA", "GO", 4, 0, 10], ["NOVA GUARITA", "MT", 11, 0, 60], ["NOVA IGUACU DE GOIAS", "GO", 4, 0, 8], ["NOVA LACERDA", "MT", 7, 0, 60], ["NOVA LIMA", "MG", 1, 0, 3], ["NOVA MARILANDIA", "MT", 10, 0, 59], ["NOVA MARINGA", "MT", 12, 0, 59], ["NOVA MODICA", "MG", 6, 0, 0], ["NOVA MONTE VERDE", "MT", 13, 0, 60], ["NOVA MUTUM", "MT", 9, 0, 59], ["NOVA NAZARE", "MT", 11, 0, 58], ["NOVA OLIMPIA", "MT", 7, 0, 59], ["NOVA OLINDA", "TO", 5, 0, 53], ["NOVA PONTE", "MG", 3, 0, 63], ["NOVA PORTEIRINHA", "MG", 7, 0, 0], ["NOVA RESENDE", "MG", 7, 0, 0], ["NOVA ROMA", "GO", 4, 0, 44], ["NOVA ROSALANDIA", "TO", 5, 0, 53], ["NOVA SANTA HELENA", "MT", 12, 0, 60], ["NOVA SERRANA", "MG", 3, 0, 2], ["NOVA UBIRATA", "MT", 12, 0, 60], ["NOVA UNIAO", "MG", 4, 0, 1], ["NOVA VENECIA", "ES", 3, 0, 65], ["NOVA VENEZA", "GO", 4, 0, 10], ["NOVA XAVANTINA", "MT", 8, 0, 58], ["NOVO ACORDO", "TO", 7, 837, 53], ["NOVO ALEGRE", "TO", 6, 0, 53], ["NOVO BRASIL", "GO", 5, 0, 13], ["NOVO DIAMANTINO", "MT", 7, 0, 59], ["NOVO GAMA", "GO", 2, 0, 4], ["NOVO HORIZONTE DO NORTE", "MT", 15, 0, 60], ["NOVO JARDIM", "TO", 5, 0, 53], ["NOVO MUNDO", "MT", 12, 0, 59], ["NOVO PLANALTO", "GO", 5, 0, 17], ["NOVO SANTO ANTONIO", "MT", 11, 0, 60], ["NOVO SAO JOAQUIM", "MT", 11, 0, 58], ["NUCLEO BANDEIRANTE", "DF", 2, 0, 4], ["OLIMPIO NORONHA", "MG", 7, 0, 0], ["OLIVEIRA", "MG", 4, 0, 1], ["OLIVEIRA DE FATIMA", "TO", 5, 0, 53], ["ONCA DE PITANGUI", "MG", 6, 0, 0], ["ORATORIOS", "MG", 6, 0, 1], ["ORIZANIA", "MG", 6, 0, 1], ["ORIZONA", "GO", 4, 0, 34], ["OURO BRANCO", "MG", 4, 0, 1], ["OURO FINO", "MG", 6, 0, 0], ["OURO PRETO", "MG", 9, 0, 0], ["OURO VERDE DE GOIAS", "GO", 4, 0, 9], ["OUVIDOR", "GO", 5, 0, 32], ["PADRE BERNARDO", "GO", 4, 837, 50], ["PAINEIRAS", "MG", 6, 0, 0], ["PAINS", "MG", 6, 0, 0], ["PALESTINA DE GOIAS", "GO", 4, 0, 22], ["PALMAS", "TO", 5, 0, 54], ["PALMEIRANTE", "TO", 8, 0, 53], ["PALMEIRAS DE GOIAS", "GO", 6, 0, 36], ["PALMEIRAS DO TOCANTINS", "TO", 8, 0, 53], ["PALMEIROPOLIS", "TO", 6, 0, 53], ["PALMELO", "GO", 5, 0, 33], ["PALMINOPOLIS", "GO", 4, 0, 21], ["PANAMA", "GO", 4, 0, 28], ["PANCAS", "ES", 6, 0, 65], ["PAPAGAIOS", "MG", 6, 0, 0], ["PARA DE MINAS", "MG", 3, 0, 2], ["PARACATU", "MG", 4, 0, 1], ["PARAGUACU", "MG", 6, 0, 0], ["PARAISO DO TOCANTINS", "TO", 5, 0, 53], ["PARAISOPOLIS", "MG", 6, 0, 0], ["PARANA", "TO", 7, 0, 53], ["PARANAIGUARA", "GO", 4, 0, 31], ["PARANAITA", "MT", 10, 0, 60], ["PARANATINGA", "MT", 8, 0, 59], ["PARANOA", "DF", 2, 0, 4], ["PARAOPEBA", "MG", 4, 0, 1], ["PARAUNA", "GO", 4, 0, 15], ["PASSA QUATRO", "MG", 6, 0, 0], ["PASSA TEMPO", "MG", 8, 837, 1], ["PASSOS", "MG", 7, 0, 0], ["PATOS DE MINAS", "MG", 3, 0, 61], ["PATROCINIO", "MG", 3, 0, 61], ["PATROCINIO DO MURIAE", "MG", 4, 0, 1], ["PAU D ARCO", "TO", 8, 837, 53], ["PEDRA DO INDAIA", "MG", 5, 0, 1], ["PEDRA PRETA", "MT", 9, 0, 58], ["PEDRALVA", "MG", 6, 0, 0], ["PEDRINOPOLIS", "MG", 3, 0, 63], ["PEDRO AFONSO", "TO", 7, 0, 53], ["PEDRO CANARIO", "ES", 6, 0, 65], ["PEDRO LEOPOLDO", "MG", 2, 0, 2], ["PEIXE", "TO", 7, 0, 53], ["PEIXOTO DE AZEVEDO", "MT", 9, 0, 60], ["PEQUI", "MG", 6, 0, 0], ["PEQUIZEIRO", "TO", 7, 0, 53], ["PERDIGAO", "MG", 3, 0, 2], ["PERDIZES", "MG", 3, 0, 63], ["PERDOES", "MG", 7, 0, 0], ["PERIQUITO", "MG", 7, 0, 1], ["PEROLANDIA", "GO", 5, 0, 14], ["PESCADOR", "MG", 6, 0, 0], ["PETROLINA DE GOIAS", "GO", 4, 0, 9], ["PIEDADE DE CARATINGA", "MG", 6, 0, 1], ["PIEDADE DE PONTE NOVA", "MG", 6, 0, 1], ["PILAR DE GOIAS", "GO", 5, 0, 8], ["PIMENTA", "MG", 6, 0, 1], ["PINDORAMA DO TOCANTINS", "TO", 7, 837, 53], ["PINHEIROS", "ES", 4, 0, 65], ["PIRACANJUBA", "GO", 4, 0, 24], ["PIRACEMA", "MG", 8, 0, 1], ["PIRAJUBA", "MG", 5, 0, 63], ["PIRANGUCU", "MG", 6, 0, 0], ["PIRANGUINHO", "MG", 6, 0, 0], ["PIRANHAS", "GO", 4, 0, 20], ["PIRAPETINGA", "MG", 6, 0, 0], ["PIRAPORA", "MG", 6, 0, 0], ["PIRAQUE", "TO", 8, 837, 53], ["PIRAUBA", "MG", 5, 0, 56], ["PIRENOPOLIS", "GO", 4, 0, 10], ["PIRES DO RIO", "GO", 4, 0, 33], ["PITANGUI", "MG", 4, 0, 1], ["PIUM", "TO", 7, 0, 53], ["PIUMA", "ES", 4, 0, 65], ["PIUMHI", "MG", 6, 0, 1], ["PLANALTINA", "DF", 4, 0, 4], ["PLANALTINA", "GO", 6, 0, 50], ["PLANALTO DA SERRA", "MT", 12, 0, 59], ["PLANURA", "MG", 5, 0, 63], ["POCO FUNDO", "MG", 6, 0, 0], ["POCONE", "MT", 7, 0, 59], ["POCOS DE CALDAS", "MG", 5, 0, 0], ["POMPEU", "MG", 6, 0, 0], ["PONTAL DO ARAGUAIA", "MT", 7, 0, 58], ["PONTALINA", "GO", 4, 0, 28], ["PONTE ALTA DO BOM JESUS", "TO", 7, 0, 53], ["PONTE ALTA DO TOCANTINS", "TO", 7, 837, 53], ["PONTE BRANCA", "MT", 12, 0, 58], ["PONTE NOVA", "MG", 4, 0, 56], ["PONTES E LACERDA", "MT", 8, 0, 60], ["PONTO BELO", "ES", 6, 0, 65], ["PORANGATU", "GO", 4, 0, 17], ["PORTEIRAO", "GO", 4, 0, 11], ["PORTEIRINHA", "MG", 9, 0, 0], ["PORTELANDIA", "GO", 4, 0, 14], ["PORTO ALEGRE DO NORTE", "MT", 8, 0, 59], ["PORTO ALEGRE DO TOCANTINS", "TO", 7, 0, 53], ["PORTO DOS GAUCHOS", "MT", 16, 0, 60], ["PORTO ESPERIDIAO", "MT", 7, 0, 60], ["PORTO ESTRELA", "MT", 12, 0, 59], ["PORTO FIRME", "MG", 6, 0, 1], ["PORTO NACIONAL", "TO", 7, 0, 53], ["POSSE", "GO", 4, 0, 44], ["POUSO ALEGRE", "MG", 4, 0, 0], ["POUSO ALTO", "MG", 7, 0, 0], ["POXOREU", "MT", 12, 0, 58], ["PRADOS", "MG", 5, 0, 0], ["PRAIA NORTE", "TO", 8, 837, 53], ["PRATA", "MG", 3, 0, 63], ["PRATAPOLIS", "MG", 7, 0, 0], ["PRATINHA", "MG", 5, 837, 61], ["PRESIDENTE KENNEDY", "ES", 6, 0, 65], ["PRESIDENTE KENNEDY", "TO", 7, 0, 53], ["PRESIDENTE OLEGARIO", "MG", 3, 0, 61], ["PRIMAVERA DO LESTE", "MT", 7, 0, 58], ["PROFESSOR JAMIL", "GO", 4, 0, 27], ["PRUDENTE DE MORAIS", "MG", 2, 0, 2], ["PUGMIL", "TO", 5, 0, 53], ["QUARTEL GERAL", "MG", 6, 0, 0], ["QUERENCIA", "MT", 8, 0, 59], ["QUIRINOPOLIS", "GO", 4, 0, 31], ["RAPOSOS", "MG", 6, 0, 2], ["RAUL SOARES", "MG", 7, 0, 1], ["RECURSOLANDIA", "TO", 8, 837, 53], ["REDUTO", "MG", 6, 0, 1], ["REGENCIA", "ES", 7, 0, 65], ["RESENDE COSTA", "MG", 5, 0, 0], ["RESERVA DO CABACAL", "MT", 8, 0, 59], ["RESPLENDOR", "MG", 6, 0, 1], ["RESSAQUINHA", "MG", 6, 0, 0], ["RIACHINHO", "TO", 8, 0, 53], ["RIACHO FUNDO", "DF", 3, 0, 4], ["RIALMA", "GO", 4, 0, 10], ["RIANAPOLIS", "GO", 5, 0, 10], ["RIBEIRAO CASCALHEIRA", "MT", 8, 0, 58], ["RIBEIRAO DAS NEVES", "MG", 1, 0, 3], ["RIBEIRAO VERMELHO", "MG", 7, 0, 0], ["RIBEIRAOZINHO", "MT", 11, 0, 58], ["RIO ACIMA", "MG", 4, 0, 2], ["RIO BANANAL", "ES", 6, 0, 65], ["RIO BRANCO", "MT", 7, 0, 59], ["RIO CASCA", "MG", 5, 0, 1], ["RIO DA CONCEICAO", "TO", 5, 0, 53], ["RIO DOS BOIS", "TO", 7, 0, 53], ["RIO MANSO", "MG", 9, 0, 2], ["RIO NOVO", "MG", 5, 0, 56], ["RIO NOVO DO SUL", "ES", 6, 0, 65], ["RIO PARANAIBA", "MG", 3, 0, 61], ["RIO PARDO DE MINAS", "MG", 8, 0, 0], ["RIO PIRACICABA", "MG", 6, 0, 1], ["RIO POMBA", "MG", 5, 0, 56], ["RIO QUENTE", "GO", 5, 0, 25], ["RIO SONO", "TO", 8, 837, 53], ["RIO VERDE", "GO", 4, 0, 11], ["ROCHEDO DE MINAS", "MG", 5, 0, 56], ["ROMARIA", "MG", 3, 0, 63], ["RONDONOPOLIS", "MT", 7, 0, 58], ["ROSARIO OESTE", "MT", 7, 0, 59], ["RUBIATABA", "GO", 4, 0, 10], ["SABARA", "MG", 1, 0, 3], ["SACRAMENTO", "MG", 4, 0, 63], ["SALINAS", "MG", 9, 0, 0], ["SALTO DO CEU", "MT", 7, 0, 59], ["SAMAMBAIA", "DF", 2, 0, 4], ["SAMPAIO", "TO", 8, 837, 53], ["SANCLERLANDIA", "GO", 7, 0, 36], ["SANDOLANDIA", "TO", 7, 0, 53], ["SANTA BARBARA", "MG", 5, 0, 1], ["SANTA BARBARA DE GOIAS", "GO", 6, 0, 36], ["SANTA BARBARA DO LESTE", "MG", 5, 0, 1], ["SANTA CARMEM", "MT", 11, 0, 60], ["SANTA CRUZ DE GOIAS", "GO", 5, 0, 33], ["SANTA CRUZ DO XINGU", "MT", 11, 0, 59], ["SANTA EFIGENIA DE MINAS", "MG", 11, 0, 1], ["SANTA ELVIRA", "MT", 12, 0, 58], ["SANTA FE DE GOIAS", "GO", 4, 0, 11], ["SANTA FE DO ARAGUAIA", "TO", 8, 837, 53], ["SANTA HELENA DE GOIAS", "GO", 4, 0, 11], ["SANTA ISABEL", "GO", 5, 0, 10], ["SANTA JULIANA", "MG", 3, 0, 63], ["SANTA LEOPOLDINA", "ES", 6, 0, 65], ["SANTA LUZIA", "MG", 1, 0, 3], ["SANTA MARGARIDA", "MG", 6, 0, 1], ["SANTA MARIA DE ITABIRA", "MG", 6, 0, 1], ["SANTA MARIA DE JETIBA", "ES", 3, 0, 65], ["SANTA MARIA DO SUACUI", "MG", 6, 0, 1], ["SANTA MARIA DO TOCANTINS", "TO", 7, 837, 53], ["SANTA RITA DE CALDAS", "MG", 6, 0, 0], ["SANTA RITA DE MINAS", "MG", 6, 0, 1], ["SANTA RITA DO ARAGUAIA", "GO", 4, 0, 14], ["SANTA RITA DO NOVO DESTINO", "GO", 8, 0, 10], ["SANTA RITA DO SAPUCAI", "MG", 6, 0, 0], ["SANTA RITA DO TOCANTINS", "TO", 5, 0, 53], ["SANTA RITA DO TRIVELATO", "MT", 12, 0, 59], ["SANTA ROSA DE GOIAS", "GO", 4, 0, 10], ["SANTA ROSA DO TOCANTINS", "TO", 7, 837, 53], ["SANTA TERESA", "ES", 3, 0, 65], ["SANTA TEREZA DE GOIAS", "GO", 5, 0, 17], ["SANTA TEREZA DO TOCANTINS", "TO", 7, 0, 53], ["SANTA TEREZINHA", "MT", 20, 0, 60], ["SANTA TEREZINHA DE GOIAS", "GO", 4, 0, 8], ["SANTA VITORIA", "MG", 5, 0, 63], ["SANTANA DA VARGEM", "MG", 7, 0, 0], ["SANTANA DO JACARE", "MG", 6, 0, 0], ["SANTANA DO MANHUACU", "MG", 5, 0, 1], ["SANTANA DO PARAISO", "MG", 6, 0, 1], ["SANTO AFONSO", "MT", 12, 0, 59], ["SANTO ANTONIO DA BARRA", "GO", 4, 0, 13], ["SANTO ANTONIO DE GOIAS", "GO", 4, 0, 9], ["SANTO ANTONIO DO AMPARO", "MG", 8, 0, 1], ["SANTO ANTONIO DO DESCOBERTO", "GO", 5, 0, 4], ["SANTO ANTONIO DO GRAMA", "MG", 6, 0, 1], ["SANTO ANTONIO DO LESTE", "MT", 7, 0, 58], ["SANTO ANTONIO DO LEVERGER", "MT", 9, 0, 59], ["SANTO ANTONIO DO MONTE", "MG", 6, 0, 1], ["SANTOS DUMONT", "MG", 4, 0, 56], ["SAO BENTO ABADE", "MG", 7, 0, 0], ["SAO BENTO DO TOCANTINS", "TO", 8, 0, 53], ["SAO DOMINGOS", "GO", 4, 0, 44], ["SAO DOMINGOS DAS DORES", "MG", 6, 0, 1], ["SAO DOMINGOS DO NORTE", "ES", 4, 0, 65], ["SAO DOMINGOS DO PRATA", "MG", 5, 0, 1], ["SAO FELIX DE MINAS", "MG", 9, 0, 0], ["SAO FELIX DO ARAGUAIA", "MT", 11, 0, 60], ["SAO FELIX DO TOCANTINS", "TO", 8, 837, 53], ["SAO FRANCISCO", "MG", 9, 0, 0], ["SAO FRANCISCO DE GOIAS", "GO", 4, 0, 9], ["SAO FRANCISCO DE PAULA", "MG", 6, 0, 1], ["SAO FRANCISCO DE SALES", "MG", 4, 0, 63], ["SAO FRANCISCO DO GLORIA", "MG", 6, 0, 1], ["SAO GABRIEL DA PALHA", "ES", 3, 0, 65], ["SAO GABRIEL DE GOIAS", "GO", 4, 0, 50], ["SAO GERALDO", "MG", 5, 0, 56], ["SAO GONCALO DO PARA", "MG", 3, 0, 2], ["SAO GONCALO DO RIO ABAIXO", "MG", 6, 0, 0], ["SAO GONCALO DO SAPUCAI", "MG", 6, 0, 0], ["SAO GOTARDO", "MG", 4, 0, 61], ["SAO JOAO BATISTA DO GLORIA", "MG", 6, 0, 0], ["SAO JOAO D ALIANCA", "GO", 4, 0, 46], ["SAO JOAO DA MATA", "MG", 6, 0, 0], ["SAO JOAO DA PARAUNA", "GO", 4, 0, 15], ["SAO JOAO DA PONTE", "MG", 5, 0, 0], ["SAO JOAO DEL REI", "MG", 5, 0, 0], ["SAO JOAO DO MANHUACU", "MG", 6, 0, 1], ["SAO JOAO DO ORIENTE", "MG", 6, 0, 1], ["SAO JOAO DO PARAISO", "MG", 6, 0, 0], ["SAO JOAO NEPOMUCENO", "MG", 5, 0, 56], ["SAO JOAQUIM DE BICAS", "MG", 4, 0, 2], ["SAO JOSE DA BARRA", "MG", 7, 0, 0], ["SAO JOSE DA LAPA", "MG", 1, 0, 3], ["SAO JOSE DA VARGINHA", "MG", 5, 0, 0], ["SAO JOSE DO ALEGRE", "MG", 6, 0, 0], ["SAO JOSE DO CALCADO", "ES", 6, 0, 65], ["SAO JOSE DO MANTIMENTO", "MG", 6, 0, 1], ["SAO JOSE DO POVO", "MT", 8, 0, 58], ["SAO JOSE DO RIO CLARO", "MT", 9, 0, 60], ["SAO JOSE DO XINGU", "MT", 11, 0, 60], ["SAO JOSE DOS QUATRO MARCOS", "MT", 7, 0, 59], ["SAO LOURENCO", "MG", 7, 0, 0], ["SAO LUIS DE MONTES BELOS", "GO", 4, 0, 21], ["SAO LUIZ DO NORTE", "GO", 4, 0, 10], ["SAO MATEUS", "ES", 3, 0, 65], ["SAO MIGUEL DO ARAGUAIA", "GO", 5, 0, 17], ["SAO MIGUEL DO PASSA QUATRO", "GO", 5, 0, 24], ["SAO MIGUEL DO TOCANTINS", "TO", 8, 0, 53], ["SAO PATRICIO", "GO", 4, 0, 10], ["SAO PEDRO DA CIPA", "MT", 9, 0, 58], ["SAO PEDRO DA UNIAO", "MG", 7, 0, 0], ["SAO PEDRO DO AVAI", "MG", 6, 0, 1], ["SAO PEDRO DOS FERROS", "MG", 6, 0, 1], ["SAO ROQUE DO CANAA", "ES", 6, 0, 65], ["SAO SALVADOR DO TOCANTINS", "TO", 7, 0, 53], ["SAO SEBASTIAO", "DF", 3, 0, 4], ["SAO SEBASTIAO DA BELA VISTA", "MG", 6, 0, 0], ["SAO SEBASTIAO DO ANTA", "MG", 6, 0, 1], ["SAO SEBASTIAO DO OESTE", "MG", 6, 0, 1], ["SAO SEBASTIAO DO PARAISO", "MG", 7, 0, 0], ["SAO SEBASTIAO DO PONTAL", "MG", 5, 0, 63], ["SAO SEBASTIAO DO RIO VERDE", "MG", 7, 0, 0], ["SAO SEBASTIAO DO TOCANTINS", "TO", 8, 0, 53], ["SAO SIMAO", "GO", 4, 0, 31], ["SAO THOME DAS LETRAS", "MG", 7, 0, 0], ["SAO TIAGO", "MG", 6, 0, 1], ["SAO TOMAS DE AQUINO", "MG", 7, 0, 0], ["SAO VALERIO DA NATIVIDADE", "TO", 7, 0, 53], ["SAO VICENTE DE MINAS", "MG", 7, 0, 0], ["SAPEZAL", "MT", 7, 0, 60], ["SAPUCAI MIRIM", "MG", 6, 0, 0], ["SARZEDO", "MG", 3, 0, 2], ["SENADOR AMARAL", "MG", 6, 0, 0], ["SENADOR CANEDO", "GO", 5, 0, 55], ["SENADOR JOSE BENTO", "MG", 6, 0, 0], ["SENHORA DOS REMEDIOS", "MG", 6, 0, 0], ["SERRA", "ES", 1, 0, 66], ["SERRA DO SALITRE", "MG", 3, 0, 61], ["SERRA NOVA DOURADA", "MT", 11, 0, 60], ["SERRANIA", "MG", 7, 0, 0], ["SERRANOPOLIS", "GO", 4, 0, 16], ["SETE LAGOAS", "MG", 2, 0, 3], ["SILVANIA", "GO", 4, 0, 24], ["SILVANOPOLIS", "TO", 7, 0, 53], ["SILVIANOPOLIS", "MG", 6, 0, 0], ["SIMOLANDIA", "GO", 4, 0, 44], ["SIMONESIA", "MG", 5, 0, 1], ["SINOP", "MT", 9, 0, 60], ["SITIO D ABADIA", "GO", 4, 0, 44], ["SITIO NOVO DO TOCANTINS", "TO", 8, 0, 53], ["SOBRADINHO", "DF", 2, 0, 4], ["SOBRALIA", "MG", 6, 0, 1], ["SOLEDADE DE MINAS", "MG", 7, 0, 0], ["SOORETAMA", "ES", 6, 0, 65], ["SORRISO", "MT", 9, 0, 59], ["SOUZALANDIA", "GO", 4, 0, 10], ["SUCUPIRA", "TO", 8, 0, 53], ["TABAPORA", "MT", 16, 0, 60], ["TABOCAO", "TO", 5, 0, 53], ["TAGUATINGA", "TO", 7, 0, 53], ["TAIOBEIRAS", "MG", 9, 0, 0], ["TAIPAS DO TOCANTINS", "TO", 8, 837, 53], ["TALISMA", "TO", 5, 0, 53], ["TANGARA DA SERRA", "MT", 8, 0, 59], ["TAPURAH", "MT", 9, 0, 60], ["TAQUARAL DE GOIAS", "GO", 4, 0, 12], ["TARUMIRIM", "MG", 5, 0, 1], ["TEIXEIRAS", "MG", 5, 0, 56], ["TEOFILO OTONI", "MG", 6, 0, 1], ["TERESINA DE GOIAS", "GO", 4, 0, 44], ["TEREZOPOLIS DE GOIAS", "GO", 4, 0, 55], ["TERRA NOVA DO NORTE", "MT", 9, 0, 60], ["TESOURO", "MT", 12, 0, 58], ["TIMOTEO", "MG", 5, 0, 1], ["TIRADENTES", "MG", 6, 837, 0], ["TIROS", "MG", 5, 0, 61], ["TOCANTINIA", "TO", 8, 837, 53], ["TOCANTINOPOLIS", "TO", 8, 0, 53], ["TOCANTINS", "MG", 6, 0, 56], ["TOCOS DO MOJI", "MG", 6, 0, 0], ["TOLEDO", "MG", 5, 0, 0], ["TOMBOS", "MG", 5, 0, 1], ["TORIXOREU", "MT", 9, 0, 58], ["TRES CORACOES", "MG", 7, 0, 0], ["TRES MARIAS", "MG", 6, 0, 1], ["TRES PONTAS", "MG", 6, 0, 0], ["TRES RANCHOS", "GO", 5, 0, 32], ["TRINDADE", "GO", 3, 0, 55], ["TROMBAS", "GO", 5, 0, 17], ["TUPACIGUARA", "MG", 3, 0, 63], ["TUPIRAMA", "TO", 7, 0, 53], ["TUPIRATINS", "TO", 8, 837, 53], ["TURVANIA", "GO", 4, 0, 21], ["TURVELANDIA", "GO", 4, 0, 11], ["TURVOLANDIA", "MG", 6, 0, 0], ["UBA", "MG", 5, 0, 56], ["UBAPORANGA", "MG", 5, 0, 1], ["UBERABA", "MG", 2, 0, 62], ["UBERLANDIA", "MG", 1, 0, 64], ["UIRAPURU", "GO", 5, 0, 8], ["UNAI", "MG", 4, 0, 1], ["UNIAO DE MINAS", "MG", 5, 0, 63], ["UNIAO DO SUL", "MT", 14, 0, 60], ["URUACU", "GO", 4, 0, 10], ["URUANA", "GO", 4, 0, 10], ["URUCANIA", "MG", 6, 0, 1], ["URUITA", "GO", 7, 0, 10], ["URUTAI", "GO", 5, 0, 34], ["VALE DE SAO DOMINGOS", "MT", 8, 0, 60], ["VALPARAISO DE GOIAS", "GO", 2, 0, 4], ["VARGEM ALEGRE", "MG", 6, 0, 1], ["VARGEM ALTA", "ES", 6, 0, 65], ["VARGINHA", "MG", 6, 0, 0], ["VARJAO", "GO", 4, 0, 27], ["VARJAO DE MINAS", "MG", 4, 0, 61], ["VARZEA DA PALMA", "MG", 8, 0, 0], ["VARZEA GRANDE", "MT", 7, 0, 58], ["VARZELANDIA", "MG", 9, 0, 0], ["VAZANTE", "MG", 4, 0, 61], ["VENDA NOVA DO IMIGRANTE", "ES", 3, 0, 65], ["VERA", "MT", 11, 0, 60], ["VERMELHO NOVO", "MG", 6, 0, 1], ["VESPASIANO", "MG", 1, 0, 3], ["VIANA", "ES", 1, 0, 66], ["VIANOPOLIS", "GO", 4, 0, 24], ["VICENTINOPOLIS", "GO", 4, 0, 28], ["VICOSA", "MG", 4, 0, 56], ["VILA BELA DA SANTISSIMA TRINDADE", "MT", 7, 0, 60], ["VILA BOA", "GO", 4, 0, 46], ["VILA PAVAO", "ES", 6, 0, 65], ["VILA PROPICIO", "GO", 10, 0, 10], ["VILA RICA", "MT", 8, 0, 59], ["VILA VALERIO", "ES", 5, 0, 65], ["VILA VELHA", "ES", 1, 0, 66], ["VIRGINIA", "MG", 7, 0, 0], ["VIRGINOPOLIS", "MG", 5, 0, 0], ["VISCONDE DO RIO BRANCO", "MG", 4, 0, 56], ["VITORIA", "ES", 1, 0, 66], ["VOLTA GRANDE", "MG", 6, 0, 1], ["WANDERLANDIA", "TO", 8, 0, 53], ["WENCESLAU BRAZ", "MG", 6, 0, 0], ["XAMBIOA", "TO", 8, 0, 53]]; // [cidadeNorm, uf, prazoDiasUteis, tda(0/1), sigIdx]
+
+// ══════════════════════════════════════════════════════════════════════════════
+// TG TRANSPORTES — tarifação por cidade (v2: corrige normalização + TG como
+// modalidade de rota própria, selecionável junto com Fiorino/Fretebras/Correios)
+// Origem: Belo Horizonte. Fonte: Relação de cidades TG + Tabela DMS (pacotinho).
+// ══════════════════════════════════════════════════════════════════════════════
+var TG_CIDADE_IDX = null; // cache: 'CIDADENORM|UF' -> registro de TG_CIDADES
+
+function _tgNorm(s){
+  return String(s||'').toUpperCase().trim()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/\([^)]*\)/g,' ')        // remove qualquer coisa entre parenteses, ex: "GOIANIA (GO)" -> "GOIANIA"
+    .replace(/[^A-Z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
+}
+
+function _tgBuildIdx(){
+  if (TG_CIDADE_IDX) return;
+  TG_CIDADE_IDX = {};
+  TG_CIDADES.forEach(function(row){
+    var k = row[0] + '|' + row[1];
+    TG_CIDADE_IDX[k] = row; // [cidadeNorm, uf, prazo, tda, sigIdx]
+  });
+}
+
+function tgBuscarCidade(cidade, estado){
+  _tgBuildIdx();
+  var k = _tgNorm(cidade) + '|' + String(estado||'').toUpperCase().trim();
+  var row = TG_CIDADE_IDX[k];
+  if (!row) return null;
+  var sigIdx = row[4];
+  if (sigIdx == null || !TG_TARIFAS[sigIdx]) return null;
+  var t = TG_TARIFAS[sigIdx];
+  return {
+    prazo: row[2],
+    tda: row[3] === 1,
+    sigla: TG_SIGLAS[sigIdx],
+    tarifa: { r50:t[0], r70:t[1], r100:t[2], exc:t[3], adv:t[4] }
+  };
+}
+
+// ── Taxas fixas por CT-e emitido (fonte: Tabela DMS, regras gerais) ──
+// Cada cliente/parada da TG gera um CT-e próprio, então essas taxas incidem
+// UMA VEZ POR CLIENTE, além da tarifa-base de frete (r50/r70/r100/excedente).
+var TG_DESPACHO_CTE = 24.57;      // R$ fixo por CT-e emitido
+var TG_PEDAGIO_POR_100KG = 8.70;  // R$ por fração de 100kg (arredonda pra cima)
+var TG_GRIS_PCT = 0.003;          // 0,30% sobre o valor da mercadoria
+var TG_GRIS_MINIMO = 5.59;        // mínimo do GRIS por CT-e
+
+function tgCalcularFrete(pesoKg, tarifa, valorMercadoria){
+  if (!tarifa || pesoKg <= 0) return 0;
+  var base;
+  if (pesoKg <= 50) base = tarifa.r50;
+  else if (pesoKg <= 70) base = tarifa.r70;
+  else if (pesoKg <= 100) base = tarifa.r100;
+  else base = tarifa.r100 + (pesoKg - 100) * tarifa.exc;
+
+  // Advalorem sobre o valor da mercadoria, se informado (senão usa 0)
+  var adv = (valorMercadoria && tarifa.adv) ? valorMercadoria * tarifa.adv : 0;
+
+  // Pedágio: por fração de 100kg, arredondado para cima (ex.: 37kg = 1 fração)
+  var fracoes100kg = Math.ceil(pesoKg / 100);
+  var pedagio = fracoes100kg * TG_PEDAGIO_POR_100KG;
+
+  // GRIS: 0,30% do valor da mercadoria, respeitando o mínimo por CT-e.
+  // Sem valor de mercadoria informado, aplicamos o mínimo (é sempre cobrado).
+  var gris = valorMercadoria ? Math.max(valorMercadoria * TG_GRIS_PCT, TG_GRIS_MINIMO) : TG_GRIS_MINIMO;
+
+  // Despacho: taxa fixa por CT-e emitido
+  var despacho = TG_DESPACHO_CTE;
+
+  return base + adv + pedagio + gris + despacho;
+}
+
+/**
+ * Valor total da mercadoria do pedido (para calcular GRIS e advalorem reais).
+ * Fonte primária: soma de (quantidade × valor_unitario) dos itens do pedido,
+ * quando o pedido veio da Carteira (c._itens). Pedidos importados via
+ * Excel/CSV/OMIE direto não trazem valor_unitario, então caem no fallback
+ * (retorna 0, e tgCalcularFrete usa o GRIS mínimo nesse caso).
+ */
+function tgValorMercadoria(c){
+  if (c._itens && c._itens.length) {
+    var total = c._itens.reduce(function(soma, it){
+      var qtd = parseFloat(it.quantidade) || 0;
+      var vu = parseFloat(it.valor_unitario) || 0;
+      return soma + (qtd * vu);
+    }, 0);
+    if (total > 0) return total;
+  }
+  return 0; // sem valor conhecido — tgCalcularFrete aplica o GRIS mínimo
+}
+
+function tgCotarCliente(c){
+  var info = tgBuscarCidade(c.CIDADE, c.ESTADO);
+  if (!info) return { atendida:false };
+  var valorMercadoria = tgValorMercadoria(c);
+  var valor = tgCalcularFrete(c.QUANTIDADE || 0, info.tarifa, valorMercadoria);
+  return { atendida:true, prazo:info.prazo, tda:info.tda, sigla:info.sigla, valor:valor, valorMercadoria:valorMercadoria };
+}
+
+/**
+ * Chave de agrupamento por destinatário: mesmo cliente + mesma cidade/UF vira
+ * 1 único CT-e na TG, mesmo que existam vários pedidos separados na lista de
+ * CLIENTES (ex.: Ped. 619, 621, 622... do mesmo cliente). Usa a mesma lógica
+ * de normalização de nome já usada pelo auto-rotas (_normCliKey), com
+ * fallback para coordenadas quando o nome não bate perfeitamente.
+ */
+/**
+ * Chave de agrupamento por destinatário: um CT-e cobre o transporte até UM
+ * destino físico. Mesmo cliente entregando em endereços diferentes (mesmo
+ * dentro da mesma cidade) exige CT-e's separados — só agrupamos pedidos que
+ * são, de fato, a mesma entrega: mesmo cliente + mesmo CEP (quando informado)
+ * + mesma cidade/UF. Sem CEP em algum dos pedidos, cai no fallback de
+ * cliente+cidade/UF (comportamento anterior), pois é a melhor aproximação
+ * disponível nesse caso.
+ */
+function _tgChaveDestinatario(c){
+  var nome = String(c.CLIENTE||'').trim().toUpperCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/\s+/g,' ').replace(/[^A-Z0-9 ]/g,'');
+  var cidade = _tgNorm(c.CIDADE);
+  var uf = String(c.ESTADO||'').toUpperCase().trim();
+  var cep = String(c.CEP||'').replace(/\D/g,'');
+  // CEP entra na chave sempre que existir — dois endereços com CEPs
+  // diferentes nunca são o mesmo destino, mesmo que a cidade seja igual.
+  return nome + '|' + cidade + '|' + uf + '|' + cep;
+}
+
+/**
+ * Cotação de uma rota na TG, agrupando pedidos do MESMO cliente/cidade em
+ * um único CT-e (peso somado), como a TG realmente cobra. O valor de cada
+ * CT-e é então distribuído proporcionalmente ao peso de volta para cada
+ * pedido individual, apenas para exibição por parada — o total da rota
+ * reflete sempre o número real de CT-e's que seriam emitidos.
+ */
+function tgCotarRota(rota){
+  if (!rota || !rota.cl || !rota.cl.length) return { total:0, cobertos:0, naoCobertos:0, detalhe:[], prazoMax:0, ctes:0 };
+
+  // 1) Agrupa os índices de CLIENTES por destinatário (cliente+cidade+UF)
+  var grupos = {}; // chave -> { idxs:[...], pesoTotal, cidade, estado }
+  rota.cl.forEach(function(ci){
+    var c = CLIENTES[ci];
+    var k = _tgChaveDestinatario(c);
+    if (!grupos[k]) grupos[k] = { idxs: [], pesoTotal: 0, cidade: c.CIDADE, estado: c.ESTADO };
+    grupos[k].idxs.push(ci);
+    grupos[k].pesoTotal += (c.QUANTIDADE || 0);
+  });
+
+  var total = 0, cobertos = 0, naoCobertos = 0, detalhe = [];
+  var prazoMax = 0, ctes = 0;
+
+  Object.keys(grupos).forEach(function(k){
+    var g = grupos[k];
+    var info = tgBuscarCidade(g.cidade, g.estado);
+
+    if (!info) {
+      g.idxs.forEach(function(ci){
+        naoCobertos++;
+        detalhe.push({ idx:ci, valor:null, prazo:null, tda:false, sigla:null });
+      });
+      return;
+    }
+
+    // Valor de mercadoria do CT-e = soma dos itens de TODOS os pedidos do grupo
+    var valorMercadoriaGrupo = g.idxs.reduce(function(soma, ci){
+      return soma + tgValorMercadoria(CLIENTES[ci]);
+    }, 0);
+
+    // 1 CT-e para o grupo inteiro, com o peso TOTAL do cliente naquela cidade
+    var valorCTE = tgCalcularFrete(g.pesoTotal, info.tarifa, valorMercadoriaGrupo);
+    total += valorCTE;
+    ctes++;
+    if (info.prazo > prazoMax) prazoMax = info.prazo;
+
+    // Distribui o valor do CT-e proporcionalmente ao peso de cada pedido,
+    // só para exibição por parada (o total da rota já está correto acima)
+    g.idxs.forEach(function(ci){
+      var c = CLIENTES[ci];
+      var proporcao = g.pesoTotal > 0 ? (c.QUANTIDADE || 0) / g.pesoTotal : (1 / g.idxs.length);
+      cobertos++;
+      detalhe.push({
+        idx: ci,
+        valor: valorCTE * proporcao,
+        prazo: info.prazo,
+        tda: info.tda,
+        sigla: info.sigla,
+        _cteCompartilhado: g.idxs.length > 1,
+        _valorCTEtotal: valorCTE,
+        _pesoCTEtotal: g.pesoTotal
+      });
+    });
+  });
+
+  return { total:total, cobertos:cobertos, naoCobertos:naoCobertos, prazoMax:prazoMax, detalhe:detalhe, ctes:ctes };
+}
+
+function calcTG(r){
+  if (!r || r.mod !== 'tg') return Promise.resolve();
+  var cot = tgCotarRota(r);
+  r.tg = cot.detalhe;
+  r.tgResumo = { total:cot.total, cobertos:cot.cobertos, naoCobertos:cot.naoCobertos, prazoMax:cot.prazoMax, ctes:cot.ctes };
+  return Promise.resolve();
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// INTEGRAÇÃO — TG como MODALIDADE DE ROTA própria (mod:'tg'), igual Correios/
+// Fretebras/Fiorino. Aparece no select "Nova rota", no select "Editar rota",
+// nos rótulos MLBL/MTYP, no painel de frete, na exportação e no auto-rotas.
+// ══════════════════════════════════════════════════════════════════════════════
+
+MLBL['tg'] = 'TG Transportes';
+MTYP['tg'] = 'tg';
+
+function _tgAdicionarOpcaoSelect(selectId){
+  var sel = document.getElementById(selectId);
+  if (!sel) return;
+  if (sel.querySelector('option[value="tg"]')) return;
+  var opt = document.createElement('option');
+  opt.value = 'tg';
+  opt.textContent = 'TG Transportes';
+  var correiosOpt = sel.querySelector('option[value="correios"]');
+  if (correiosOpt && correiosOpt.nextSibling) sel.insertBefore(opt, correiosOpt.nextSibling);
+  else sel.appendChild(opt);
+}
+_tgAdicionarOpcaoSelect('nr-m');
+_tgAdicionarOpcaoSelect('er-mod');
+
+var _origFMod_TG = typeof fMod === 'function' ? fMod : null;
+fMod = function(id){
+  if (_origFMod_TG) _origFMod_TG(id);
+  var v = document.getElementById(id).value;
+  if (v === 'tg') {
+    var elKm = document.getElementById('nr-km'); if (elKm) elKm.style.display = 'none';
+    var elFx = document.getElementById('nr-fx'); if (elFx) elFx.style.display = 'none';
+    var elCr = document.getElementById('nr-cr'); if (elCr) elCr.style.display = 'none';
+    var c = document.getElementById('nr-c'); if (c) c.value = '';
+  }
+};
+
+var _origOnErMod_TG = typeof onErMod === 'function' ? onErMod : null;
+onErMod = function(){
+  if (_origOnErMod_TG) _origOnErMod_TG();
+  var mod = document.getElementById('er-mod').value;
+  if (mod === 'tg') {
+    show('er-km-wrap', false);
+    show('er-fix-wrap', false);
+    show('er-cap-wrap', false);
+  }
+};
+
+var _origStats_TG = stats;
+stats = function(r){
+  var base = _origStats_TG(r);
+  if (r.mod === 'tg') {
+    if (!r.tgResumo) { calcTG(r); }
+    var res = r.tgResumo || { total: 0 };
+    return { dist: base.dist, peso: base.peso, frete: res.total || 0, n: base.n };
+  }
+  return base;
+};
+
+var _origRateio_TG = rateio;
+rateio = function(r){
+  if (r.mod !== 'tg') return _origRateio_TG(r);
+  var s = stats(r);
+  var ft = s.frete;
+  if (ft <= 0) return null;
+
+  var precosPraca = calcPrecosPraca(r);
+  var cl = r.cl.map(function(i){ return CLIENTES[i]; });
+  var tc = r.cl.reduce(function(soma, ci){
+    var c = CLIENTES[ci];
+    if (c.SEGMENTO !== 'COMERCIAL') return soma;
+    var pp = precosPraca[ci] || 0;
+    return soma + (pp > 0 ? c.QUANTIDADE * pp : 0);
+  }, 0);
+  var fc = Math.min(tc, ft);
+  var sl = Math.max(0, ft - fc);
+  var pl = cl.filter(function(c){ return c.SEGMENTO !== 'COMERCIAL'; }).reduce(function(s2,c){ return s2+c.QUANTIDADE; }, 0);
+  var fk = pl > 0 ? sl / pl : 0;
+  var rp = {};
+  r.cl.forEach(function(i){
+    var c = CLIENTES[i];
+    if (c.SEGMENTO === 'COMERCIAL') {
+      var pp = precosPraca[i] || 0;
+      rp[i] = pp > 0 ? c.QUANTIDADE * pp : 0;
+    } else {
+      rp[i] = c.QUANTIDADE * fk;
+    }
+  });
+  return { ft:ft, tc:tc, fc:fc, sl:sl, pl:pl, fk:fk, rp:rp, precosPraca:precosPraca };
+};
+
+var _origUpdFB_TG = updFB;
+updFB = function(r){
+  if (!r || r.mod !== 'tg') { _origUpdFB_TG(r); return; }
+
+  var el = document.getElementById('fc');
+  if (!el) return;
+
+  if (!r.tgResumo) {
+    el.innerHTML = '<div class="fb" style="background:rgba(124,58,237,.08);border:1px solid rgba(124,58,237,.3);"><div class="ft" style="color:#7c3aed;">TG Transportes - calculando...</div><span class="sp"></span> Aguarde</div>';
+    calcTG(r).then(function(){ upAll(); });
+    return;
+  }
+
+  var res = r.tgResumo;
+  var s = stats(r);
+
+  var html = '';
+
+  if (res.naoCobertos > 0) {
+    html += '<div style="background:rgba(220,38,38,.08);border:1px solid rgba(220,38,38,.3);border-radius:8px;padding:10px;margin-bottom:8px;font-size:11px;color:#991b1b;">'
+      + '⚠️ ' + res.naoCobertos + ' de ' + (res.cobertos+res.naoCobertos) + ' parada(s) FORA da área de cobertura da TG. '
+      + 'Essas cidades não serão cobradas pela TG — mova-as para outra rota (Correios/Fiorino/Fretebras).'
+      + '</div>';
+  }
+
+  if (res.cobertos === 0) {
+    html += '<div class="fb" style="border:1px dashed var(--vm);background:#fef2f2;padding:12px;border-radius:8px;">'
+      + '<div style="font-size:10px;font-weight:700;color:#991b1b;text-transform:uppercase;margin-bottom:6px;">Nenhuma cidade atendida</div>'
+      + '<div style="font-size:11px;color:var(--txts);">Nenhum pedido desta rota está na área de cobertura da TG Transportes. Troque a modalidade da rota.</div>'
+      + '</div>';
+    el.innerHTML = html;
+    return;
+  }
+
+  html += '<div class="fb" style="background:linear-gradient(135deg,rgba(124,58,237,.12) 0%,rgba(167,139,250,.08) 100%);border:1px solid rgba(124,58,237,.3);">'
+    + '<div class="ft" style="color:#7c3aed;">TG Transportes</div>'
+    + '<div style="font-size:9px;color:#7c3aed;margin-bottom:8px;">' + res.cobertos + ' parada(s) atendida(s) · prazo máx ' + res.prazoMax + ' dia(s) úteis</div>'
+    + '<div class="fk3"><div class="fki"><div class="fkl" style="color:#7c3aed;">Total</div><div class="fkv" style="color:#7c3aed;">' + fmt(res.total) + '</div></div>'
+    + '<div class="fki"><div class="fkl" style="color:#7c3aed;">R$/kg</div><div class="fkv" style="color:#7c3aed;">' + (s.peso>0?fmt(res.total/s.peso)+'/kg':'--') + '</div></div>'
+    + '<div class="fki"><div class="fkl" style="color:#7c3aed;">Paradas</div><div class="fkv" style="color:#7c3aed;">' + res.cobertos + '</div></div></div>'
+    + '</div>';
+
+  var rt = rateio(r);
+  if (rt) {
+    html += '<div class="rb">'
+      + '<div class="rl3"><span class="rll">Frete total (TG)</span><span style="color:var(--txt);font-weight:600;">' + fmt(rt.ft) + '</span></div>'
+      + '<div class="rl3"><span class="rll">Teto comercial</span><span class="rvc">' + fmt(rt.tc) + '</span></div>'
+      + '<div class="rl3"><span class="rll">Frete comercial</span><span class="rvc">' + fmt(rt.fc) + '</span></div>'
+      + '<div class="rl3"><span class="rll">Saldo licitacao</span><span class="rvl">' + fmt(rt.sl) + '</span></div>'
+      + (rt.pl > 0 ? '<div class="rl3"><span class="rll">R$/kg licitacao</span><span class="rvl">' + fmt(rt.fk) + '/kg</span></div>' : '')
+      + '</div>';
+  }
+
+  el.innerHTML = html;
+};
+
+var _origUpdPar_TG = updPar;
+updPar = function(r){
+  if (!r || r.mod !== 'tg') { _origUpdPar_TG(r); return; }
+
+  var rt = rateio(r);
+  var pv = {lat:CD.lat,lng:CD.lng};
+  var ph = r.cl.map(function(ci, idx){
+    var c = CLIENTES[ci];
+    var tr = Math.round(dist(pv, {lat:c.LATITUDE,lng:c.LONGITUDE}));
+    pv = {lat:c.LATITUDE,lng:c.LONGITUDE};
+    var sc = c.SEGMENTO==='AMOSTRA'?'ra2':(c.SEGMENTO==='LICITACAO'?'rl2':'rc2');
+    var info = r.tg ? r.tg.find(function(t){ return t.idx === ci; }) : null;
+    var rh = '';
+    if (info && info.valor != null) {
+      var freteTxt = rt && rt.rp[ci] !== undefined ? fmt(rt.rp[ci]) : fmt(info.valor);
+      rh = '<div class="pr ' + sc + '">' + (c.SEGMENTO==='AMOSTRA'?'Amostra':(c.SEGMENTO==='LICITACAO'?'Licitacao':'Comercial')) + ': ' + freteTxt + '</div>'
+        + '<div class="pr" style="background:rgba(124,58,237,.12);color:#5b21b6;">TG (' + info.sigla + '): ' + fmt(info.valor) + ' · ' + info.prazo + 'd úteis' + (info.tda?' · TDA +2d':'') + '</div>';
+    } else {
+      rh = '<div class="pr" style="background:rgba(220,38,38,.12);color:#991b1b;">TG: cidade não atendida</div>';
+    }
+    return '<div class="pi"><div class="pn" style="background:' + r.cor + ';">' + (idx+1) + '</div>'
+      + '<div class="pif"><div class="pnm">' + c.CLIENTE + '</div>'
+      + (c.SKU?'<div style="font-size:9px;color:#3b82f6;font-family:monospace;">'+c.SKU+(c.PEDIDO?' Ped: '+c.PEDIDO:'')+'</div>':'')
+      + (c.PRODUTO?'<div style="font-size:10px;color:#f59e0b;">'+c.PRODUTO+'</div>':'')
+      + '<div class="pm">' + c.CIDADE + '/' + c.ESTADO + ' ' + c.QUANTIDADE + ' kg +' + tr + ' km ' + c.DATA_ENTREGA + '</div>' + rh + '</div>'
+      + '<button class="btn d" onclick="rmRota(' + ci + ')">X</button></div>';
+  }).join('');
+  var ret = Math.round(dist(pv, {lat:CD.lat,lng:CD.lng}));
+  document.getElementById('lp').innerHTML =
+    '<div class="pi"><div class="pn" style="background:#15803d;">CD</div><div class="pif"><div class="pnm">CD MFParis - Partida</div></div></div>'
+    + ph
+    + '<div class="pi"><div class="pn" style="background:#15803d;">CD</div><div class="pif"><div class="pnm">Retorno ao CD - ' + ret + ' km</div></div></div>';
+};
+
+['adRota','rmRota','adGrupo','adGrupoTodos','todos','novaRota','otimizar','salvarEditRota'].forEach(function(fnName){
+  var orig = window[fnName];
+  if (typeof orig !== 'function') return;
+  window[fnName] = function(){
+    var result = orig.apply(this, arguments);
+    var r = rotas.find(function(rr){ return rr.id === rotaId; });
+    if (r && r.mod === 'tg') { r.tgResumo = null; calcTG(r).then(function(){ upAll(); }); }
+    return result;
+  };
+});
+
+// Dentro de rotas 'correios' (as que o auto-rotas já cria), mostra um
+// comparativo somente-leitura da cotação TG, com botão para converter a
+// rota inteira para modalidade TG com um clique, se for vantajoso.
+var _origUpdFB_Correios_TG = updFB;
+updFB = function(r){
+  _origUpdFB_Correios_TG(r);
+  if (!r || r.mod !== 'correios') return;
+
+  var cotTG = tgCotarRota(r);
+  var el = document.getElementById('fc');
+  if (!el) return;
+
+  var bloco = '<div class="fb" style="background:rgba(124,58,237,.06);border:1px solid rgba(124,58,237,.3);margin-top:8px;">'
+    + '<div class="ft" style="color:#7c3aed;">Comparar com TG Transportes</div>';
+
+  if (cotTG.cobertos === 0) {
+    bloco += '<div style="font-size:11px;color:#991b1b;">Nenhuma cidade desta rota é atendida pela TG Transportes.</div>';
+  } else {
+    bloco += '<div style="font-size:9px;color:#7c3aed;margin-bottom:6px;">' + cotTG.cobertos + ' de ' + (cotTG.cobertos+cotTG.naoCobertos) + ' parada(s) atendida(s) · prazo máx ' + cotTG.prazoMax + 'd úteis</div>'
+      + '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">'
+      + '<div style="font-size:16px;font-weight:700;color:#7c3aed;">' + fmt(cotTG.total) + '</div>'
+      + (cotTG.naoCobertos === 0
+          ? '<button class="btn" style="background:#7c3aed;color:#fff;font-size:10px;padding:5px 10px;" onclick="converterRotaParaTG(' + r.id + ')">Usar TG nesta rota</button>'
+          : '<span style="font-size:9px;color:#92400e;">' + cotTG.naoCobertos + ' fora da área</span>')
+      + '</div>';
+  }
+  bloco += '</div>';
+  el.innerHTML += bloco;
+};
+
+function converterRotaParaTG(rid){
+  var r = rotas.find(function(rr){ return rr.id === rid; });
+  if (!r) return;
+  var cot = tgCotarRota(r);
+  if (cot.naoCobertos > 0) {
+    alert(cot.naoCobertos + ' pedido(s) desta rota não são atendidos pela TG. Remova-os antes de converter.');
+    return;
+  }
+  r.mod = 'tg';
+  r.svc = null;
+  r.cc = null;
+  r.tgResumo = null;
+  calcTG(r).then(function(){ upAll(); });
+}
+
+function fmtTGBadge(c){
+  var cot = tgCotarCliente(c);
+  if (!cot.atendida) {
+    return ' <span style="background:rgba(220,38,38,.10);color:#991b1b;padding:1px 6px;border-radius:4px;font-weight:700;font-size:10px;" title="Cidade não atendida pela TG Transportes">🚫 TG</span>';
+  }
+  var merc = cot.valorMercadoria > 0 ? ' · merc. ' + fmt(cot.valorMercadoria) : ' · GRIS mínimo (sem valor de mercadoria no pedido)';
+  var titulo = 'TG Transportes · praça ' + cot.sigla + ' · prazo ' + cot.prazo + ' dia(s) úteis' + (cot.tda ? ' · TDA (dificil acesso, +2 dias)' : '') + merc + ' · ' + fmt(cot.valor);
+  return ' <span style="background:rgba(124,58,237,.12);color:#5b21b6;padding:1px 6px;border-radius:4px;font-weight:700;font-size:10px;cursor:help;" title="'+titulo.replace(/"/g,"'")+'">🚚 TG ' + fmt(cot.valor) + '</span>';
+}
+
+var _origUpdLC_TG = typeof updLC === 'function' ? updLC : null;
+updLC = function(){
+  if (_origUpdLC_TG) _origUpdLC_TG();
+  var ll = document.getElementById('ll');
+  if (!ll) return;
+  var cards = ll.querySelectorAll('.ci');
+  var arr = cliFilt.filter(function(c){ return !inRota(CLIENTES.indexOf(c)); });
+  cards.forEach(function(card, i){
+    if (card.querySelector('.tg-badge-mark')) return;
+    var c = arr[i];
+    if (!c) return;
+    var cm = card.querySelector('.cm');
+    if (!cm) return;
+    var span = document.createElement('span');
+    span.className = 'tg-badge-mark';
+    span.innerHTML = fmtTGBadge(c);
+    cm.appendChild(span.firstElementChild || span);
+  });
+};
+
+console.log('[TG Transportes] módulo carregado como modalidade de rota própria: ' + TG_CIDADES.length + ' cidades, ' + TG_TARIFAS.length + ' praças de tarifa.');
+
+// ══════════════════════════════════════════════════════════════════════════════
+// CORREÇÃO v2: pedido devolvido/despachado reaparecendo por RACE CONDITION
+// (substitui qualquer versão anterior deste patch — a v1 bloqueava o pedido
+// permanentemente, o que está ERRADO: um pedido devolvido precisa poder ser
+// reenviado e roteirizado de novo mais tarde, normalmente.)
+// ══════════════════════════════════════════════════════════════════════════════
+// CAUSA DO BUG: ao devolver um pedido (ou despachar uma rota), o app remove o
+// pedido da tela na hora, mas a remoção dele no Firebase (carteira_envio/pedidos)
+// é assíncrona e leva um instante. Se lerCarteira() rodar NESSA janela (reload,
+// outra aba, clique em "Carregar Carteira"), o Firebase ainda tem o pedido
+// antigo e ele é lido de volta como se fosse novo.
+//
+// CORREÇÃO: guardamos, só enquanto a remoção no Firebase ainda não foi
+// confirmada, uma proteção TEMPORÁRIA (expira sozinha) que impede o pedido de
+// ser relido nesse intervalo curto. Assim que a escrita no Firebase é
+// confirmada (ou o teto de segurança de 30s passa), a proteção cai sozinha e
+// o pedido volta a se comportar normalmente — inclusive podendo ser reenviado
+// pela Carteira e roteirizado de novo no futuro, sem nenhum bloqueio definitivo.
+// ══════════════════════════════════════════════════════════════════════════════
+
+var _pedidosEmRemocao = {}; // chave -> timestamp de quando a remoção começou
+var PROTECAO_TEMP_MS = 30000; // teto de segurança: 30s, depois libera sozinho
+
+function _protegerTemporariamente(chave){
+  if (!chave) return;
+  _pedidosEmRemocao[String(chave).trim()] = Date.now();
+}
+
+function _liberarProtecao(chave){
+  if (!chave) return;
+  delete _pedidosEmRemocao[String(chave).trim()];
+}
+
+function _estaProtegidoTemporariamente(chave){
+  if (!chave) return false;
+  var k = String(chave).trim();
+  var inicio = _pedidosEmRemocao[k];
+  if (!inicio) return false;
+  // Proteção expira sozinha após o teto de segurança, para nunca travar
+  // um pedido de vez caso algo dê errado na confirmação do Firebase.
+  if (Date.now() - inicio > PROTECAO_TEMP_MS) {
+    delete _pedidosEmRemocao[k];
+    return false;
+  }
+  return true;
+}
+
+// ── Filtra pedidos em processarPedidosCarteira apenas durante a janela curta
+// em que a remoção deles no Firebase ainda está em andamento. Não bloqueia
+// nada de forma permanente — assim que a remoção é confirmada (ou o teto de
+// 30s passa), o pedido volta a poder ser lido normalmente pela Carteira. ─────
+var _origProcessarPedidosCarteira = typeof processarPedidosCarteira === 'function' ? processarPedidosCarteira : null;
+processarPedidosCarteira = function(pedidos){
+  if (!pedidos || !pedidos.length) return;
+
+  var pedidosFiltrados = pedidos.filter(function(p){
+    var k = String(p.codigo_pedido || p.numero_pedido || '').trim();
+    if (!k) return true;
+    return !_estaProtegidoTemporariamente(k);
+  });
+
+  if (_origProcessarPedidosCarteira) _origProcessarPedidosCarteira(pedidosFiltrados);
+};
+
+// ── devolverCarteira: protege o pedido só até a reescrita no Firebase ser
+// confirmada, depois libera a proteção (o pedido pode ser reenviado e
+// roteirizado de novo normalmente a partir daí). ──────────────────────────────
+var _origDevolverCarteira = window.devolverCarteira;
+window.devolverCarteira = async function(idx){
+  var c = CLIENTES[idx];
+  if (!c) return;
+
+  var chave = String(c._codigo_pedido || c.PEDIDO || '').trim();
+  if (chave) _protegerTemporariamente(chave);
+
+  try {
+    if (_origDevolverCarteira) {
+      await _origDevolverCarteira(idx);
+    }
+  } finally {
+    // Libera a proteção depois que o fluxo original (que já reescreve o
+    // Firebase) terminar — sucesso ou erro, a proteção não precisa durar
+    // além disso, o teto de 30s já cobre qualquer atraso residual de rede.
+    if (chave) _liberarProtecao(chave);
+  }
+};
+
+// ── despacharRota: mesma lógica — protege só durante a janela de escrita no
+// Firebase, depois libera. Pedidos despachados não voltam à Carteira porque
+// já saíram da lista carteira_envio/pedidos (comportamento original), não
+// porque estão bloqueados aqui. ───────────────────────────────────────────────
+var _origDespacharRota = typeof despacharRota === 'function' ? despacharRota : null;
+despacharRota = function(rotaId){
+  var r = rotas.find(function(rr){ return rr.id == rotaId; });
+  var chaves = [];
+  if (r && r.cl && r.cl.length) {
+    r.cl.forEach(function(ci){
+      var c = CLIENTES[ci];
+      if (!c) return;
+      var chave = String(c._codigo_pedido || c.PEDIDO || '').trim();
+      if (chave) { chaves.push(chave); _protegerTemporariamente(chave); }
+    });
+  }
+  // despacharRota original não é async (usa .then encadeado), então liberamos
+  // a proteção após o teto de segurança padrão — o próprio Firebase write
+  // dentro dela roda em paralelo e normalmente confirma bem antes disso.
+  if (chaves.length) {
+    setTimeout(function(){
+      chaves.forEach(function(k){ _liberarProtecao(k); });
+    }, PROTECAO_TEMP_MS);
+  }
+  if (_origDespacharRota) return _origDespacharRota(rotaId);
+};
+
+console.log('[Fix Carteira v2] Proteção temporária contra race condition ativa (sem bloqueio permanente).');
+
+
+
+</script>
+
+
 
 </body>
 </html>

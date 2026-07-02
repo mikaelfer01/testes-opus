@@ -192,6 +192,11 @@ html,body{min-height:100%;background:var(--cream);font-family:'DM Sans',sans-ser
 .op-num-val strong{color:var(--navy);}
 .op-bar-bg{height:4px;background:rgba(0,0,0,.08);border-radius:2px;overflow:hidden;margin-top:4px;}
 .op-bar-fill{height:100%;border-radius:2px;background:var(--navy);transition:width .5s;}
+@media(max-width:640px){
+  .kpi-row{grid-template-columns:1fr 1fr}
+  .modal-resumo{grid-template-columns:1fr}
+  .ops-grid{grid-template-columns:1fr}
+}
 </style>
 </head>
 <body>

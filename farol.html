@@ -153,6 +153,14 @@ tbody tr:hover td{background:rgba(239,246,255,.55);}
 ::-webkit-scrollbar{width:6px;height:6px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:rgba(15,23,42,.15);border-radius:3px}
+@media(max-width:700px){
+  .kpis{grid-template-columns:repeat(4,1fr)}
+  .kpis2{grid-template-columns:1fr 1fr}
+  main{padding:.75rem .75rem}
+}
+@media(max-width:420px){
+  .kpis{grid-template-columns:repeat(2,1fr)}
+}
 </style>
 </head>
 <body>

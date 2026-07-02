@@ -181,6 +181,12 @@ nav{background:var(--navy-d);border-bottom:2px solid var(--gold);padding:0 24px;
 .tab-link{height:54px;padding:0 8px;gap:4px;font-size:10px;}
 .tab-link svg{width:11px;height:11px;}
 .tabs-brand{font-size:12px;margin-right:12px;}
+@media(max-width:700px){
+  .cfg-row{grid-template-columns:1fr}
+  .prog-grid{grid-template-columns:100px 1fr 70px 70px;gap:4px}
+  .prog-grid>:nth-child(n+5){display:none}
+  .cal-grid{grid-template-columns:1fr}
+}
 </style>
 </head>
 <body>
