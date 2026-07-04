@@ -163,9 +163,10 @@ nav{background:var(--navy-d);border-bottom:2px solid var(--gold);padding:0 24px;
   .modal-resumo{grid-template-columns:1fr 1fr}
 }
 </style>
+<script src="/js/nav.js" defer></script>
 </head>
 <body>
-
+<div id="opus-body-shift">
 <nav>
   <div class="nav-left">
     <span class="nav-opus">OPUS</span>
@@ -177,17 +178,6 @@ nav{background:var(--navy-d);border-bottom:2px solid var(--gold);padding:0 24px;
     <span class="nav-status" id="omie-status">Mock — dados de demonstração</span>
     <button class="btn-cfg" onclick="atualizar()">↻ Atualizar</button>
   </div>
-</nav>
-
-<nav class="tabs-bar">
-  <span class="tabs-brand">Grupo MF Paris<small>OPUS</small></span>
-  <a href="index.html" class="tab-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>Início</a>
-  <a href="programacao.html" class="tab-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Programação</a>
-  <a href="simulador-producao.html" class="tab-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/></svg>Simulador</a>
-  <a href="apontamento.html" class="tab-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>Apontamento</a>
-  <a href="farol.html" class="tab-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="4"/><path d="M9 4h6l1 4H8L9 4z"/><path d="M8 8l-1 8h10l-1-8"/></svg>Farol</a>
-  <a href="estoque.html" class="tab-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="2" y1="17" x2="18" y2="17"/><path d="M4 17V7h8v10"/><path d="M12 10h4l2 4v3h-6V10z"/><circle cx="6" cy="19.5" r="1.5"/><circle cx="15" cy="19.5" r="1.5"/></svg>Estoque</a>
-  <button type="button" class="tab-link active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>Comercial</button>
 </nav>
 
 <div class="wrap">
@@ -825,5 +815,6 @@ document.getElementById('drill-modal').addEventListener('click', e => {
   }
 })();
 </script>
+</div><!-- /opus-body-shift -->
 </body>
 </html>
