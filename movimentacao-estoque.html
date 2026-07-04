@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Movimentação de Depósitos</title>
+<script src="/js/nav.js" defer></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --cream:#F2EFE8;--card:#FDFAF5;--icon:#EDE8DF;
+  --navy:#1A2B4A;--navy-d:#0F1D33;--gold:#B8864A;
+  --gold-b:rgba(184,134,74,.2);--gold-l:rgba(184,134,74,.1);
+  --div:#C8B99A;--muted:#5A544E;
+  --green:#2E7D52;--green-l:#E4EDE4;
+  --red:#B03A2E;--red-l:#FDECEA;
+  --amber:#9A6B1A;--amber-l:#FFF3DC;
+  --blue:#1A56A0;--blue-l:#E8F0FB;
+}
+html,body{min-height:100%;background:var(--cream);font-family:'DM Sans',system-ui,sans-serif;color:var(--navy);font-size:14px;-webkit-font-smoothing:antialiased;}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.page-header{padding:28px 28px 0;max-width:900px;margin:0 auto;}
+.page-title{font-size:22px;font-weight:700;color:var(--navy);}
+.page-sub{font-size:13px;color:var(--muted);margin-top:4px;}
+
+.wrap{padding:20px 28px 60px;display:flex;flex-direction:column;gap:16px;max-width:900px;margin:0 auto;}
+
+.sec{background:var(--card);border:0.5px solid var(--gold-b);border-radius:16px;padding:22px 24px;animation:fadeUp .3s ease both;}
+.sec-title{font-size:9px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.12em;margin-bottom:16px;padding-bottom:8px;border-bottom:0.5px solid var(--gold-l);}
+
+.row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;}
+.field{display:flex;flex-direction:column;gap:4px;flex:1;min-width:160px;}
+.field label{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;}
+.field select,.field input{height:36px;border:1.5px solid var(--gold-b);border-radius:8px;padding:0 10px;font-size:13px;background:#fff;font-family:inherit;outline:none;color:var(--navy);transition:border-color .15s;}
+.field select:focus,.field input:focus{border-color:var(--gold);}
+.field select:disabled,.field input:disabled{opacity:.5;background:var(--icon);}
+
+.btn-primary{padding:0 20px;border:none;border-radius:9px;background:var(--navy);color:#fff;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:7px;white-space:nowrap;transition:all .15s;height:36px;flex-shrink:0;}
+.btn-primary:hover{background:var(--navy-d);}
+.btn-primary:disabled{opacity:.4;cursor:not-allowed;}
+.btn-confirm{background:#2E7D52;}
+.btn-confirm:hover{background:#1e5c3a;}
+
+.saldo-box{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px;}
+.saldo-card{background:var(--cream);border:0.5px solid var(--gold-b);border-radius:10px;padding:12px 14px;}
+.saldo-card .lbl{font-size:10px;color:var(--muted);margin-bottom:4px;}
+.saldo-card .val{font-size:18px;font-weight:600;color:var(--navy);}
+.saldo-card .unit{font-size:11px;color:var(--div);margin-left:3px;}
+
+.table-wrap{overflow-x:auto;border:0.5px solid var(--gold-b);border-radius:12px;margin-top:14px;}
+table{width:100%;border-collapse:collapse;font-size:12px;}
+th{padding:9px 10px;text-align:left;background:var(--navy);font-size:9px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.08em;white-space:nowrap;}
+th.r,td.r{text-align:right;}
+td{padding:8px 10px;border-bottom:0.5px solid var(--gold-l);vertical-align:middle;}
+tr:last-child td{border-bottom:none;}
+tr:hover td{background:var(--cream);}
+tr.selected td{background:var(--blue-l);}
+td.cod{font-family:monospace;font-size:11px;color:var(--muted);}
+
+.sel-sku{border:2px solid var(--gold);border-radius:10px;padding:12px 14px;margin-top:14px;display:none;animation:fadeUp .2s ease;}
+.sel-sku .sku-name{font-weight:600;font-size:15px;color:var(--navy);}
+.sel-sku .sku-cod{font-family:monospace;font-size:11px;color:var(--muted);margin-top:2px;}
+
+.qty-row{display:flex;gap:10px;align-items:flex-end;margin-top:14px;}
+.qty-row .field{max-width:200px;}
+
+.progress-bar{height:3px;background:var(--icon);border-radius:2px;overflow:hidden;margin-bottom:12px;}
+.progress-fill{height:100%;background:var(--gold);border-radius:2px;transition:width .4s;}
+
+.alert{border-radius:10px;padding:11px 14px;font-size:12px;margin-top:10px;display:none;animation:fadeUp .2s ease;}
+.alert-err{background:var(--red-l);color:var(--red);border:0.5px solid rgba(176,58,46,.3);}
+.alert-ok{background:var(--green-l);color:var(--green);border:0.5px solid rgba(46,125,82,.3);}
+.alert-warn{background:var(--amber-l);color:var(--amber);border:0.5px solid rgba(154,107,26,.3);}
+
+.spinner{width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0;}
+
+.profi-notice{background:var(--amber-l);color:var(--amber);border:0.5px solid rgba(154,107,26,.3);border-radius:10px;padding:12px 14px;font-size:12px;display:none;}
+
+.dir-arrow{display:flex;align-items:center;gap:10px;padding:10px 0;font-size:13px;}
+.dir-arrow .dep-badge{padding:4px 12px;border-radius:6px;background:var(--navy);color:#fff;font-size:11px;font-weight:600;}
+.dir-arrow .arrow{color:var(--gold);font-size:18px;}
+
+@media(max-width:600px){
+  .page-header{padding:16px 16px 0;}
+  .wrap{padding:12px 16px 40px;}
+  .saldo-box{grid-template-columns:1fr 1fr;}
+  .row{flex-direction:column;}
+}
+</style>
+</head>
+<body>
+<div id="opus-body-shift">
+
+<div class="page-header">
+  <div class="page-title">Movimentação de Depósitos</div>
+  <div class="page-sub">Transfira quantidades de SKU entre depósitos via API Omie</div>
+</div>
+
+<div class="wrap">
+
+  <!-- 1. Configuração -->
+  <div class="sec">
+    <div class="sec-title">Configuração</div>
+    <div class="row">
+      <div class="field" style="max-width:200px">
+        <label>Empresa</label>
+        <select id="sel-empresa" onchange="onEmpresaChange()">
+          <option value="">Selecione…</option>
+          <option value="MFP">MF Paris</option>
+          <option value="DMS">DMS Alimentos</option>
+          <option value="PRF">Profi Comércio</option>
+        </select>
+      </div>
+      <div class="field" style="max-width:180px">
+        <label>Depósito Origem</label>
+        <select id="sel-origem" disabled onchange="onDepositoChange()">
+          <option value="">—</option>
+        </select>
+      </div>
+      <div class="field" style="max-width:180px">
+        <label>Depósito Destino</label>
+        <select id="sel-destino" disabled onchange="onDepositoChange()">
+          <option value="">—</option>
+        </select>
+      </div>
+    </div>
+    <div class="profi-notice" id="profi-notice">
+      A Profi Comércio possui apenas um depósito (CD) — não há transferência disponível.
+    </div>
+  </div>
+
+  <!-- 2. Busca de SKU -->
+  <div class="sec" id="sec-busca" style="display:none">
+    <div class="sec-title">Buscar SKU no Depósito Origem</div>
+    <div class="row">
+      <div class="field">
+        <label>Código ou descrição do SKU</label>
+        <input id="inp-sku" type="text" placeholder="Ex: 12345 ou farinha…" onkeydown="if(event.key==='Enter')consultarEstoque()">
+      </div>
+      <button class="btn-primary" id="btn-consultar" onclick="consultarEstoque()">
+        <span id="sp-consultar">🔍 Consultar</span>
+      </button>
+    </div>
+
+    <div class="progress-bar" style="margin-top:12px;"><div class="progress-fill" id="prog-busca" style="width:0%"></div></div>
+    <div class="alert alert-err" id="err-busca"></div>
+
+    <div class="table-wrap" id="tbl-wrap" style="display:none">
+      <table>
+        <thead>
+          <tr>
+            <th>Código</th>
+            <th>Descrição</th>
+            <th class="r">Físico</th>
+            <th class="r">Disponível</th>
+            <th class="r">Reservado</th>
+          </tr>
+        </thead>
+        <tbody id="tbl-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 3. SKU selecionado + quantidade -->
+  <div class="sec" id="sec-mov" style="display:none">
+    <div class="sec-title">Movimentação</div>
+
+    <div class="dir-arrow" id="dir-arrow">
+      <span class="dep-badge" id="badge-origem">—</span>
+      <span class="arrow">→</span>
+      <span class="dep-badge" id="badge-destino">—</span>
+    </div>
+
+    <div class="sel-sku" id="sel-sku-box">
+      <div class="sku-name" id="sku-nome"></div>
+      <div class="sku-cod" id="sku-cod"></div>
+    </div>
+
+    <div class="saldo-box" id="saldo-box">
+      <div class="saldo-card">
+        <div class="lbl">Saldo Físico</div>
+        <div class="val" id="s-fisico">—<span class="unit"></span></div>
+      </div>
+      <div class="saldo-card">
+        <div class="lbl">Disponível</div>
+        <div class="val" id="s-disp">—</div>
+      </div>
+      <div class="saldo-card">
+        <div class="lbl">Reservado</div>
+        <div class="val" id="s-res">—</div>
+      </div>
+    </div>
+
+    <div class="qty-row">
+      <div class="field">
+        <label>Quantidade a mover</label>
+        <input id="inp-qty" type="number" min="0.001" step="0.001" placeholder="0,000">
+      </div>
+      <button class="btn-primary btn-confirm" id="btn-mover" onclick="confirmarMovimentacao()">
+        <span id="sp-mover">✓ Confirmar Movimentação</span>
+      </button>
+    </div>
+
+    <div class="alert alert-err" id="err-mov"></div>
+    <div class="alert alert-ok" id="ok-mov"></div>
+    <div class="alert alert-warn" id="warn-mov"></div>
+  </div>
+
+</div><!-- /wrap -->
+</div><!-- /opus-body-shift -->
+
+<script>
+const EMPRESAS = {
+  MFP: { nome:'MF Paris',      key:'952260381072',  secret:'8300b385eeec583c71439709ab866fc7',
+         depositos:[ {id:3701081863, label:'Fábrica'}, {id:4976544083, label:'CD'} ] },
+  DMS: { nome:'DMS Alimentos',  key:'1340821992510', secret:'dac287f9b3ec422dc93da6cdbcc3e0b2',
+         depositos:[ {id:9325633240, label:'Fábrica'}, {id:9325632785, label:'CD'} ] },
+  PRF: { nome:'Profi Comércio', key:'6625695374298', secret:'588e34aa9429edcae86f5e87c47a65df',
+         depositos:[ {id:10973189010, label:'CD'} ] },
+};
+
+const MOV_ENDPOINT = 'https://app.omie.com.br/api/v1/estoque/movimentacao/';
+const EST_ENDPOINT = 'https://app.omie.com.br/api/v1/estoque/consulta/';
+
+let empresa = null;
+let origemDep = null;
+let destDep = null;
+let skuSelecionado = null;
+let saldoFisico = 0;
+
+async function omieCall(endpoint, call, param) {
+  const payload = { call, app_key: String(empresa.key), app_secret: String(empresa.secret), param };
+  const resp = await fetch('/api/omie', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ endpoint, payload })
+  });
+  if (!resp.ok) throw new Error('HTTP ' + resp.status);
+  const data = await resp.json();
+  if (data.faultstring) throw new Error(data.faultstring);
+  if (data.error && typeof data.error === 'string') throw new Error(data.error);
+  return data;
+}
+
+function today() {
+  const d = new Date();
+  return [String(d.getDate()).padStart(2,'0'), String(d.getMonth()+1).padStart(2,'0'), d.getFullYear()].join('/');
+}
+
+function fmtNum(v) {
+  if (v == null || v === '') return '—';
+  return Number(v).toLocaleString('pt-BR', {minimumFractionDigits:3, maximumFractionDigits:3});
+}
+
+function showAlert(id, msg) {
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+function hideAlerts(...ids) { ids.forEach(id => { document.getElementById(id).style.display = 'none'; }); }
+
+function onEmpresaChange() {
+  const cod = document.getElementById('sel-empresa').value;
+  empresa = cod ? EMPRESAS[cod] : null;
+  skuSelecionado = null;
+
+  const ori = document.getElementById('sel-origem');
+  const dest = document.getElementById('sel-destino');
+  const profiNote = document.getElementById('profi-notice');
+  const secBusca = document.getElementById('sec-busca');
+  const secMov = document.getElementById('sec-mov');
+
+  ori.innerHTML = '<option value="">—</option>';
+  dest.innerHTML = '<option value="">—</option>';
+  ori.disabled = true;
+  dest.disabled = true;
+  profiNote.style.display = 'none';
+  secBusca.style.display = 'none';
+  secMov.style.display = 'none';
+
+  if (!empresa) return;
+
+  if (empresa.depositos.length < 2) {
+    profiNote.style.display = 'block';
+    return;
+  }
+
+  empresa.depositos.forEach(dep => {
+    ori.appendChild(new Option(dep.label, dep.id));
+    dest.appendChild(new Option(dep.label, dep.id));
+  });
+
+  // default: first → second
+  ori.value = empresa.depositos[0].id;
+  dest.value = empresa.depositos[1].id;
+  ori.disabled = false;
+  dest.disabled = false;
+  onDepositoChange();
+}
+
+function onDepositoChange() {
+  const oriVal = document.getElementById('sel-origem').value;
+  const destVal = document.getElementById('sel-destino').value;
+  origemDep = empresa ? empresa.depositos.find(d => String(d.id) === oriVal) : null;
+  destDep   = empresa ? empresa.depositos.find(d => String(d.id) === destVal) : null;
+
+  skuSelecionado = null;
+  document.getElementById('tbl-wrap').style.display = 'none';
+  document.getElementById('sec-mov').style.display = 'none';
+  document.getElementById('sec-busca').style.display = (origemDep && destDep && oriVal !== destVal) ? 'block' : 'none';
+
+  if (oriVal && destVal && oriVal === destVal) {
+    document.getElementById('sec-busca').style.display = 'none';
+  }
+}
+
+async function consultarEstoque() {
+  hideAlerts('err-busca');
+  document.getElementById('tbl-wrap').style.display = 'none';
+  document.getElementById('sec-mov').style.display = 'none';
+
+  const filtro = document.getElementById('inp-sku').value.trim().toLowerCase();
+  const btn = document.getElementById('btn-consultar');
+  const sp = document.getElementById('sp-consultar');
+  const prog = document.getElementById('prog-busca');
+
+  btn.disabled = true;
+  sp.innerHTML = '<span class="spinner"></span> Carregando…';
+  prog.style.width = '30%';
+
+  try {
+    let todos = [];
+    let pag = 1;
+    while (true) {
+      const data = await omieCall(EST_ENDPOINT, 'ListarPosEstoque', [{
+        nPagina: pag, nRegPorPagina: 500,
+        dDataPosicao: today(),
+        cExibeTodos: 'S',
+        codigo_local_estoque: origemDep.id
+      }]);
+      const lista = data.produto_estoque_lista || [];
+      todos = todos.concat(lista);
+      const total = data.nTotRegistros || lista.length;
+      prog.style.width = Math.min(90, 30 + (todos.length / Math.max(total,1)) * 60) + '%';
+      if (lista.length < 500) break;
+      pag++;
+    }
+
+    prog.style.width = '100%';
+    setTimeout(() => prog.style.width = '0%', 600);
+
+    // filtrar
+    const itens = filtro
+      ? todos.filter(i => String(i.cCodigo||'').toLowerCase().includes(filtro) || (i.cDescricao||'').toLowerCase().includes(filtro))
+      : todos.filter(i => Number(i.fisico||0) > 0);
+
+    renderTabela(itens);
+
+  } catch(e) {
+    prog.style.width = '0%';
+    showAlert('err-busca', 'Erro ao consultar estoque: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    sp.textContent = '🔍 Consultar';
+  }
+}
+
+function renderTabela(itens) {
+  const tbody = document.getElementById('tbl-body');
+  if (!itens.length) {
+    document.getElementById('tbl-wrap').style.display = 'none';
+    showAlert('err-busca', 'Nenhum item encontrado com saldo no depósito origem.');
+    return;
+  }
+
+  tbody.innerHTML = itens.map(i => `
+    <tr onclick="selecionarSKU('${i.cCodigo}','${(i.cDescricao||'').replace(/'/g,"\\'")}',${i.fisico||0},${i.nSaldo||0},${i.reservado||0},this)">
+      <td class="cod">${i.cCodigo||'—'}</td>
+      <td>${i.cDescricao||'—'}</td>
+      <td class="r">${fmtNum(i.fisico)}</td>
+      <td class="r">${fmtNum(i.nSaldo)}</td>
+      <td class="r">${fmtNum(i.reservado)}</td>
+    </tr>`).join('');
+  document.getElementById('tbl-wrap').style.display = 'block';
+}
+
+function selecionarSKU(cod, desc, fisico, disp, res, tr) {
+  document.querySelectorAll('#tbl-body tr').forEach(r => r.classList.remove('selected'));
+  tr.classList.add('selected');
+
+  skuSelecionado = { cod, desc };
+  saldoFisico = Number(fisico) || 0;
+
+  document.getElementById('sku-nome').textContent = desc;
+  document.getElementById('sku-cod').textContent = 'SKU ' + cod;
+  document.getElementById('sel-sku-box').style.display = 'block';
+  document.getElementById('s-fisico').innerHTML = fmtNum(fisico);
+  document.getElementById('s-disp').textContent = fmtNum(disp);
+  document.getElementById('s-res').textContent = fmtNum(res);
+  document.getElementById('badge-origem').textContent = origemDep.label;
+  document.getElementById('badge-destino').textContent = destDep.label;
+  document.getElementById('inp-qty').value = '';
+  hideAlerts('err-mov','ok-mov','warn-mov');
+  document.getElementById('sec-mov').style.display = 'block';
+  document.getElementById('sec-mov').scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+async function confirmarMovimentacao() {
+  hideAlerts('err-mov','ok-mov','warn-mov');
+
+  if (!skuSelecionado) { showAlert('err-mov','Selecione um SKU na tabela acima.'); return; }
+
+  const qty = parseFloat(document.getElementById('inp-qty').value);
+  if (!qty || qty <= 0) { showAlert('err-mov','Informe uma quantidade válida.'); return; }
+  if (qty > saldoFisico) {
+    showAlert('err-mov', `Quantidade solicitada (${fmtNum(qty)}) excede o saldo físico disponível (${fmtNum(saldoFisico)}) no depósito ${origemDep.label}.`);
+    return;
+  }
+
+  const btn = document.getElementById('btn-mover');
+  const sp = document.getElementById('sp-mover');
+  btn.disabled = true;
+  sp.innerHTML = '<span class="spinner"></span> Processando…';
+
+  try {
+    // Saída do depósito origem
+    await omieCall(MOV_ENDPOINT, 'IncluirLancEstoque', [{
+      cCodigo: skuSelecionado.cod,
+      nQtde: qty,
+      cTipo: 'S',
+      codigo_local_estoque: origemDep.id,
+      cObs: `Transferência para ${destDep.label} via OPUS`
+    }]);
+
+    // Entrada no depósito destino
+    await omieCall(MOV_ENDPOINT, 'IncluirLancEstoque', [{
+      cCodigo: skuSelecionado.cod,
+      nQtde: qty,
+      cTipo: 'E',
+      codigo_local_estoque: destDep.id,
+      cObs: `Transferência de ${origemDep.label} via OPUS`
+    }]);
+
+    showAlert('ok-mov', `✓ Transferência concluída! ${fmtNum(qty)} de ${skuSelecionado.desc} movidos de ${origemDep.label} → ${destDep.label}.`);
+    saldoFisico = Math.max(0, saldoFisico - qty);
+    document.getElementById('s-fisico').innerHTML = fmtNum(saldoFisico);
+
+  } catch(e) {
+    showAlert('err-mov', 'Erro na movimentação: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    sp.textContent = '✓ Confirmar Movimentação';
+  }
+}
+</script>
+</body>
+</html>
