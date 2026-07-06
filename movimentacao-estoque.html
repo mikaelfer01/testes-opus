@@ -331,21 +331,20 @@ async function consultarEstoque() {
 
   try {
     let todos = [];
-    let pag = 1;
-    while (true) {
+    let pag = 1, totPag = 1;
+    do {
       const data = await omieCall(EST_ENDPOINT, 'ListarPosEstoque', [{
         nPagina: pag, nRegPorPagina: 500,
         dDataPosicao: today(),
         cExibeTodos: 'S',
         codigo_local_estoque: origemDep.id
       }]);
-      const lista = data.produto_estoque_lista || [];
+      totPag = parseInt(data.nTotPaginas || 1);
+      const lista = data.produtos || [];
       todos = todos.concat(lista);
-      const total = data.nTotRegistros || lista.length;
-      prog.style.width = Math.min(90, 30 + (todos.length / Math.max(total,1)) * 60) + '%';
-      if (lista.length < 500) break;
+      prog.style.width = Math.min(90, 30 + (pag / Math.max(totPag, 1)) * 60) + '%';
       pag++;
-    }
+    } while (pag <= totPag);
 
     prog.style.width = '100%';
     setTimeout(() => prog.style.width = '0%', 600);
@@ -359,7 +358,8 @@ async function consultarEstoque() {
 
   } catch(e) {
     prog.style.width = '0%';
-    showAlert('err-busca', 'Erro ao consultar estoque: ' + e.message);
+    showAlert('err-busca', 'Erro ao consultar estoque: ' + e.message + (e.detail ? ' — ' + e.detail : ''));
+    console.error('[movimentacao] consultarEstoque error', e);
   } finally {
     btn.disabled = false;
     sp.textContent = '🔍 Consultar';
