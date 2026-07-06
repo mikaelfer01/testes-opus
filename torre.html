@@ -7,9 +7,9 @@
 <title>OPUS — Torre de Controle</title>
 <script type="module" src="/checar-login.js"></script>
 <script src="/js/nav.js" defer></script>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<link href="https://api.mapbox.com/mapbox-gl-js/v3.6.0/mapbox-gl.css" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.6.0/mapbox-gl.js"></script>
 <style>
 :root{--azul-d:#0a1f6b;--azul:#1e40af;--verde:#16a34a;--vm:#dc2626;--lj:#ea580c;--gold:#d4af37;--txt:#0b1437;--txtm:#3f4a6b;--txts:#6b7691;--glass:rgba(255,255,255,0.92);--border:rgba(15,23,42,0.08);--shadow:0 4px 20px rgba(0,0,0,0.1);--r:10px;--rl:16px;}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -147,6 +147,15 @@ body{display:flex;flex-direction:column;-webkit-font-smoothing:antialiased}
 .empty-icon{font-size:36px;margin-bottom:8px}
 .ld{display:inline-block;width:14px;height:14px;border:2px solid rgba(30,64,175,.2);border-top-color:var(--azul);border-radius:50%;animation:spin .7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
+/* Mapbox controls */
+.map-controls{position:absolute;top:12px;left:12px;z-index:500;display:flex;flex-direction:column;gap:6px}
+.map-style-panel{background:rgba(255,255,255,.92);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.8);border-radius:10px;padding:8px 10px;box-shadow:0 4px 16px rgba(0,0,0,.15)}
+.map-style-label{font-size:9px;font-weight:700;color:var(--txts);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px}
+.map-style-btns{display:flex;gap:4px;flex-wrap:wrap}
+.map-style-btn{padding:4px 8px;border-radius:6px;border:1px solid rgba(15,23,42,.12);background:rgba(255,255,255,.7);cursor:pointer;font-size:10px;font-weight:600;font-family:inherit;color:var(--txtm);transition:all .15s;white-space:nowrap}
+.map-style-btn.on{background:var(--azul);color:#fff;border-color:var(--azul)}
+.map-traffic-btn{padding:7px 10px;border-radius:10px;border:1px solid rgba(15,23,42,.12);background:rgba(255,255,255,.92);backdrop-filter:blur(20px);cursor:pointer;font-size:11px;font-weight:700;font-family:inherit;color:var(--txtm);transition:all .15s;box-shadow:0 4px 16px rgba(0,0,0,.15);text-align:left}
+.map-traffic-btn.on{background:var(--lj);color:#fff;border-color:var(--lj)}
 @media(max-width:700px){
   .painel{width:100%;border-right:none;border-bottom:1px solid rgba(255,255,255,.65);max-height:260px}
   .main{flex-direction:column}
@@ -173,8 +182,8 @@ body{display:flex;flex-direction:column;-webkit-font-smoothing:antialiased}
     <div class="painel-hdr">
       <div class="painel-title">Motoristas em rota</div>
       <div class="filtros">
-        <button class="filtro-btn on" onclick="setFiltro('todos',this)">Todos</button>
-        <button class="filtro-btn" onclick="setFiltro('emrota',this)">🚗 Em rota</button>
+        <button class="filtro-btn on" onclick="setFiltro('emrota',this)">🚗 Em rota</button>
+        <button class="filtro-btn" onclick="setFiltro('todos',this)">Todos</button>
         <button class="filtro-btn" onclick="setFiltro('pendente',this)">⏳ Pendentes</button>
         <button class="filtro-btn" onclick="setFiltro('concluido',this)">✅ Concluídos</button>
       </div>
@@ -187,6 +196,21 @@ body{display:flex;flex-direction:column;-webkit-font-smoothing:antialiased}
 
   <div class="mw" style="position:relative">
     <div id="map"></div>
+
+    <!-- Mapbox controls -->
+    <div class="map-controls">
+      <div class="map-style-panel">
+        <div class="map-style-label">Estilo do mapa</div>
+        <div class="map-style-btns">
+          <button class="map-style-btn on" data-style="streets" onclick="setMapStyle('streets')">🗺 Ruas</button>
+          <button class="map-style-btn" data-style="satellite" onclick="setMapStyle('satellite')">🛰 Satélite</button>
+          <button class="map-style-btn" data-style="dark" onclick="setMapStyle('dark')">🌙 Dark</button>
+          <button class="map-style-btn" data-style="navigation" onclick="setMapStyle('navigation')">🧭 Nav</button>
+        </div>
+      </div>
+      <button class="map-traffic-btn" id="traffic-btn" onclick="toggleTraffic()">🚦 Trânsito ao vivo</button>
+    </div>
+
     <div class="resumo">
       <div class="res-title">Resumo do dia</div>
       <div class="res-grid">
@@ -264,16 +288,64 @@ import { ref, onValue, update } from 'https://www.gstatic.com/firebasejs/10.12.0
 import { onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 
 var despachos = {}, marcadores = {}, paradaLy = [];
-var motoristaSel = null, filtroAtual = 'todos', buscaAtual = '', abaAtual = 'mapa';
+var motoristaSel = null, filtroAtual = 'emrota', buscaAtual = '', abaAtual = 'mapa';
 var CORES = ['#3b82f6','#f97316','#22c55e','#a855f7','#ef4444','#06b6d4','#eab308','#ec4899'];
 var coresMot = {}, corIdx = 0;
 var map;
+var _trafficOn = false, _currentStyle = 'streets';
+var MAP_STYLES = {
+  streets: 'mapbox://styles/mapbox/streets-v12',
+  satellite: 'mapbox://styles/mapbox/satellite-streets-v12',
+  dark: 'mapbox://styles/mapbox/dark-v11',
+  navigation: 'mapbox://styles/mapbox/navigation-day-v1'
+};
 
 // ── MAPA ──────────────────────────────────────────────────────────────────────
-map = L.map('map', {zoomControl:true}).setView([-19.921307,-44.025736], 6);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{attribution:'© OSM',maxZoom:19}).addTo(map);
-var cdIco = L.divIcon({html:'<div style="width:14px;height:14px;border-radius:50%;background:#22c55e;border:3px solid #fff;box-shadow:0 0 8px rgba(34,197,94,.7)"></div>',className:'',iconAnchor:[7,7]});
-L.marker([-19.921307,-44.025736],{icon:cdIco}).bindPopup('<b>CD MFParis — Contagem/MG</b>').addTo(map);
+mapboxgl.accessToken = 'pk.eyJ1IjoibWlrYWVsb2YiLCJhIjoiY21xYjFqc2VzMGFpZDJxb2RiYmNyYm9sMCJ9.rPn4EfcmJMES2VufecE7Vg';
+map = new mapboxgl.Map({
+  container: 'map',
+  style: MAP_STYLES.streets,
+  center: [-44.025736, -19.921307],
+  zoom: 6
+});
+map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+
+// CD marker
+var cdEl = document.createElement('div');
+cdEl.style.cssText = 'width:14px;height:14px;border-radius:50%;background:#22c55e;border:3px solid #fff;box-shadow:0 0 8px rgba(34,197,94,.7)';
+new mapboxgl.Marker({element: cdEl})
+  .setLngLat([-44.025736, -19.921307])
+  .setPopup(new mapboxgl.Popup({offset:15}).setHTML('<b>CD MFParis — Contagem/MG</b>'))
+  .addTo(map);
+
+map.on('load', function() { addTrafficLayer(); });
+
+function addTrafficLayer() {
+  if (map.getSource('traffic')) return;
+  try {
+    map.addSource('traffic', { type:'vector', url:'mapbox://mapbox.mapbox-traffic-v1' });
+    map.addLayer({ id:'traffic-layer', type:'line', source:'traffic', 'source-layer':'traffic',
+      layout:{ visibility:'none' },
+      paint:{ 'line-width':2.5, 'line-color':['match',['get','congestion'],'low','#2dc4b2','moderate','#f8c54a','heavy','#f97316','severe','#dc2626','#aaa'] }
+    });
+  } catch(e) {}
+}
+
+window.setMapStyle = function(s) {
+  _currentStyle = s;
+  document.querySelectorAll('.map-style-btn').forEach(function(b){ b.classList.toggle('on', b.dataset.style === s); });
+  map.setStyle(MAP_STYLES[s]);
+  map.once('style.load', function() {
+    addTrafficLayer();
+    if (!_trafficOn) { try { map.setLayoutProperty('traffic-layer','visibility','none'); } catch(e){} }
+  });
+};
+
+window.toggleTraffic = function() {
+  _trafficOn = !_trafficOn;
+  document.getElementById('traffic-btn').classList.toggle('on', _trafficOn);
+  try { map.setLayoutProperty('traffic-layer','visibility', _trafficOn ? 'visible' : 'none'); } catch(e){}
+};
 
 setInterval(function(){document.getElementById('badge-hora').textContent = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});}, 1000);
 
@@ -390,22 +462,43 @@ function atualizarMarcadores() {
     var cor = getCor(t);
     var nC = Object.keys(d.confirmacoes||{}).length, nP = (d.paradas||[]).length;
     if (marcadores[t]) {
-      marcadores[t].setLatLng([d.gps.lat,d.gps.lng]);
-      marcadores[t].setIcon(mkMotIco(cor,d.motoristaNome,nC,nP));
+      marcadores[t].setLngLat([d.gps.lng, d.gps.lat]);
+      marcadores[t].getElement().innerHTML = mkMotIcoHTML(cor, d.motoristaNome, nC, nP);
     } else {
-      var m = L.marker([d.gps.lat,d.gps.lng],{icon:mkMotIco(cor,d.motoristaNome,nC,nP)})
-        .bindPopup(buildPopup(t,d)).addTo(map);
-      m.on('click', function(){ selecionarMot(t); });
+      var el = document.createElement('div');
+      el.style.cssText = 'position:relative;cursor:pointer';
+      el.innerHTML = mkMotIcoHTML(cor, d.motoristaNome, nC, nP);
+      var popup = new mapboxgl.Popup({offset:20, maxWidth:'240px'}).setHTML(buildPopup(t,d));
+      var m = new mapboxgl.Marker({element:el})
+        .setLngLat([d.gps.lng, d.gps.lat])
+        .setPopup(popup)
+        .addTo(map);
+      el.addEventListener('click', (function(tok){ return function(e){ e.stopPropagation(); selecionarMot(tok); }; })(t));
       marcadores[t] = m;
     }
-    if (marcadores[t].isPopupOpen()) marcadores[t].setPopupContent(buildPopup(t,d));
+    var pop = marcadores[t].getPopup();
+    if (pop && pop.isOpen()) pop.setHTML(buildPopup(t,d));
   });
+  atualizarVisibilidadeMarcadores();
   if (motoristaSel && despachos[motoristaSel]) desenharParadas(motoristaSel, despachos[motoristaSel]);
 }
 
-function mkMotIco(cor,nome,nC,nP) {
+function mkMotIcoHTML(cor, nome, nC, nP) {
   var ini = (nome||'?').charAt(0).toUpperCase();
-  return L.divIcon({html:'<div style="position:relative"><div style="width:38px;height:38px;border-radius:50%;background:'+cor+';border:3px solid #fff;display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px;font-weight:800;box-shadow:0 4px 12px rgba(0,0,0,.3)">'+ini+'</div><div style="position:absolute;bottom:-3px;right:-3px;background:#fff;border-radius:5px;padding:1px 4px;font-size:9px;font-weight:800;color:'+cor+';border:1px solid '+cor+'">'+nC+'/'+nP+'</div></div>',className:'',iconAnchor:[19,19]});
+  return '<div style="width:38px;height:38px;border-radius:50%;background:'+cor+';border:3px solid #fff;display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px;font-weight:800;box-shadow:0 4px 12px rgba(0,0,0,.3)">'+ini+'</div>'
+    +'<div style="position:absolute;bottom:-3px;right:-3px;background:#fff;border-radius:5px;padding:1px 4px;font-size:9px;font-weight:800;color:'+cor+';border:1px solid '+cor+'">'+nC+'/'+nP+'</div>';
+}
+
+function atualizarVisibilidadeMarcadores() {
+  Object.keys(marcadores).forEach(function(t) {
+    var d = despachos[t]; if (!d) return;
+    var nC = Object.keys(d.confirmacoes||{}).length, nP = (d.paradas||[]).length;
+    var visible = true;
+    if (filtroAtual==='emrota' && (!d.iniciou||d.concluido)) visible = false;
+    if (filtroAtual==='pendente' && nC>=nP) visible = false;
+    if (filtroAtual==='concluido' && !d.concluido) visible = false;
+    marcadores[t].getElement().style.display = visible ? '' : 'none';
+  });
 }
 
 function buildPopup(t,d) {
@@ -426,23 +519,32 @@ function buildPopup(t,d) {
 }
 
 function desenharParadas(t,d) {
-  paradaLy.forEach(function(l){map.removeLayer(l);}); paradaLy=[];
+  paradaLy.forEach(function(m){ m.remove(); }); paradaLy=[];
   (d.paradas||[]).forEach(function(p,idx){
     if (!p.lat||!p.lng) return;
     var c = d.confirmacoes && d.confirmacoes[idx];
     var cor = c ? (c.tipo==='entregue'?'#22c55e':c.tipo==='entregue-avaria'?'#f59e0b':c.tipo==='entregue-parcial'?'#f97316':c.tipo==='devolucao'?'#dc2626':'#22c55e') : '#94a3b8';
-    var ico = L.divIcon({html:'<div style="width:22px;height:22px;border-radius:50%;background:'+cor+';border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#fff;box-shadow:0 2px 6px rgba(0,0,0,.3)">'+(idx+1)+'</div>',className:'',iconAnchor:[11,11]});
-    var m = L.marker([p.lat,p.lng],{icon:ico}).bindTooltip((idx+1)+'. '+(p.cliente||'—')+(c&&c.foraRaio?' ⚠ FORA DO RAIO':''),{permanent:false}).addTo(map);
+    var el = document.createElement('div');
+    el.style.cssText = 'width:22px;height:22px;border-radius:50%;background:'+cor+';border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#fff;box-shadow:0 2px 6px rgba(0,0,0,.3);cursor:pointer';
+    el.textContent = idx+1;
+    var tooltip = (idx+1)+'. '+(p.cliente||'—')+(c&&c.foraRaio?' ⚠ FORA DO RAIO':'');
+    var m = new mapboxgl.Marker({element:el})
+      .setLngLat([p.lng, p.lat])
+      .setPopup(new mapboxgl.Popup({offset:10,closeButton:false}).setHTML('<div style="font-family:Inter,sans-serif;font-size:11px">'+tooltip+'</div>'))
+      .addTo(map);
     paradaLy.push(m);
   });
 }
 
 window.selecionarMot = function(t) {
   motoristaSel = motoristaSel===t ? null : t;
-  paradaLy.forEach(function(l){map.removeLayer(l);}); paradaLy=[];
+  paradaLy.forEach(function(m){ m.remove(); }); paradaLy=[];
   if (motoristaSel && despachos[t]) {
     desenharParadas(t, despachos[t]);
-    if (marcadores[t]) map.setView(marcadores[t].getLatLng(), 10, {animate:true});
+    if (marcadores[t]) {
+      var ll = marcadores[t].getLngLat();
+      map.flyTo({center:[ll.lng, ll.lat], zoom:10, animate:true});
+    }
   }
   renderPainel();
 };
@@ -453,6 +555,7 @@ window.setFiltro = function(f,btn) {
   document.querySelectorAll('.filtro-btn').forEach(function(b){b.classList.remove('on');});
   btn.classList.add('on');
   renderPainel();
+  atualizarVisibilidadeMarcadores();
 };
 window.filtrarBusca = function(v) { buscaAtual=v; renderPainel(); };
 
