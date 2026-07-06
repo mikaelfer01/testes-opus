@@ -60,6 +60,8 @@ body{display:flex;flex-direction:column;-webkit-font-smoothing:antialiased}
 .mot-bar-fill{height:100%;border-radius:2px;transition:width .5s}
 .mot-ult{font-size:10px;color:var(--txts)}
 .mot-fora{font-size:10px;font-weight:700;color:var(--vm);margin-top:3px}
+.btn-finalizar{width:100%;margin-top:7px;padding:6px 10px;border:1px solid rgba(220,38,38,.3);border-radius:8px;background:rgba(220,38,38,.07);color:#991b1b;font-family:inherit;font-size:11px;font-weight:700;cursor:pointer;transition:all .15s;display:block;text-align:center;}
+.btn-finalizar:hover{background:rgba(220,38,38,.15);border-color:rgba(220,38,38,.5);}
 
 .paradas-list{margin-top:8px;border-top:1px solid var(--border);padding-top:8px;display:none}
 .paradas-list.on{display:block}
@@ -258,7 +260,7 @@ body{display:flex;flex-direction:column;-webkit-font-smoothing:antialiased}
 <!-- Firebase com auth — usa o módulo ES6 já carregado pelo checar-login.js -->
 <script type="module">
 import { db as _db, auth } from '/js/firebase-init.js';
-import { ref, onValue } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
+import { ref, onValue, update } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
 import { onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 
 var despachos = {}, marcadores = {}, paradaLy = [];
@@ -360,6 +362,9 @@ window.renderPainel = function() {
     html += '</div>';
     html += '<div class="mot-bar"><div class="mot-bar-fill" style="width:'+pct+'%;background:'+cor+'"></div></div>';
     html += '<div class="mot-ult">🕐 '+(d.gps?tempoRel(d.gps.ts):'sem GPS')+' · '+nC+'/'+nP+' paradas</div>';
+    if (!d.concluido) {
+      html += '<button class="btn-finalizar" onclick="event.stopPropagation();finalizarRota(\''+t+'\')" title="Marcar rota como concluída">⏹ Finalizar rota</button>';
+    }
     if (sel) {
       html += '<div class="paradas-list on">';
       (d.paradas||[]).forEach(function(p,idx){
@@ -601,6 +606,25 @@ function atualizarResumo() {
   document.getElementById('r-pendentes').textContent = Math.max(0,pend);
   document.getElementById('r-avarias').textContent   = avar;
 }
+
+// ── FINALIZAR ROTA ────────────────────────────────────────────────────────────
+window.finalizarRota = function(token) {
+  var d = despachos[token];
+  if (!d) return;
+  var nome = d.motoristaNome || 'este motorista';
+  var nC = Object.keys(d.confirmacoes||{}).length;
+  var nP = (d.paradas||[]).length;
+  var pendentes = nP - nC;
+  var msg = 'Finalizar a rota de ' + nome + '?\n\n'
+    + nC + '/' + nP + ' paradas confirmadas';
+  if (pendentes > 0) msg += ' (' + pendentes + ' ainda pendente' + (pendentes>1?'s':'') + ')';
+  msg += '.\n\nA rota será marcada como concluída e sairá do painel ativo.';
+  if (!confirm(msg)) return;
+
+  update(ref(_db, 'despachos/' + token), { concluido: true })
+    .then(function() { /* onValue atualiza automaticamente */ })
+    .catch(function(err) { alert('Erro ao finalizar rota: ' + err.message); });
+};
 
 // ── FOTO ─────────────────────────────────────────────────────────────────────
 window.verFoto = function(src,info) {
