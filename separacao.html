@@ -289,7 +289,6 @@ canvas{display:block;width:100%;height:100%;cursor:crosshair;touch-action:none}
 }
 .hide{display:none!important}
 </style>
-<script type="module" src="/js/nav.js"></script>
 </head>
 <body>
 
@@ -512,10 +511,8 @@ onValue(ref(_db, 'despachos'), snap => {
   DTS = snap.val() || {};
   hide('loading');
   badges();
-  // Atualiza tela ativa sem resetar navegação.
-  // Pula re-render enquanto usuário está digitando em campo de rastreabilidade.
-  const focusadoRastro = document.activeElement?.classList.contains('rastro-inp');
-  if (dtSep) { if (!focusadoRastro) renderDetSep(); }
+  // Atualiza tela ativa sem resetar navegação
+  if (dtSep) renderDetSep();
   else if (dtCar) renderDetCar();
   else mostrarLista(aba);
 }, err => {
@@ -671,6 +668,10 @@ window.abrirDetSep = function(tk, semUpdate) {
 
 function renderDetSep() {
   const dt = DTS[dtSep]; if (!dt) { mostrarLista('sep'); return; }
+  // Não re-renderiza enquanto o usuário está digitando num campo de rastreabilidade
+  // (evita perder o foco do input a cada caractere digitado)
+  const ativo = document.activeElement;
+  if (ativo && ativo.classList && ativo.classList.contains('rastro-inp')) return;
   const finalizado = ['separado','em_carregamento','carregado','despachado','em_transito'].includes(dt.statusFluxo);
   setHdr(dt.nomeRota||'—', (dt.motoristaNome||'—') + ' · ' + (dt.motoristaPlaca||''));
   document.getElementById('sep-rota').textContent = dt.nomeRota||'—';
@@ -716,7 +717,7 @@ function pedCardSep(p, i, acao, fotosArr, finalizado) {
         ].filter(Boolean).join('');
         return `<div style="padding:8px 10px;border-bottom:1px solid var(--border)"><div style="display:grid;grid-template-columns:70px 1fr 56px;gap:6px;align-items:center"><div class="item-sku">${sku}</div><div class="item-desc">${it.descricao||it.produto||'—'}</div><div class="item-qtd">${it.quantidade||it.qtd||0}</div></div>${tags ? '<div style="margin-top:5px;display:flex;flex-wrap:wrap;gap:4px">'+tags+'</div>' : ''}</div>`;
       }
-      return `<div style="padding:8px 10px;border-bottom:1px solid var(--border)"><div style="display:grid;grid-template-columns:70px 1fr 56px;gap:6px;align-items:center;margin-bottom:6px"><div class="item-sku">${sku}</div><div class="item-desc">${it.descricao||it.produto||'—'}</div><div class="item-qtd">${it.quantidade||it.qtd||0}</div></div><div class="rastro-box"><div class="rastro-titulo">🔍 Rastreabilidade</div><div class="rastro-grid"><div class="rastro-campo"><label class="rastro-lbl">🏷 Lote</label><input class="rastro-inp" type="text" placeholder="Ex: L2024001" value="${r.lote||''}" oninput="salvarRastro(${i},${j},'lote',this.value)"></div><div class="rastro-campo"><label class="rastro-lbl">🏭 Fabricação</label><input class="rastro-inp" type="date" value="${r.fab||''}" oninput="salvarRastro(${i},${j},'fab',this.value)"></div><div class="rastro-campo"><label class="rastro-lbl">📅 Validade</label><input class="rastro-inp" type="date" value="${r.val||''}" oninput="salvarRastro(${i},${j},'val',this.value)"></div></div></div></div>`;
+      return `<div style="padding:8px 10px;border-bottom:1px solid var(--border)"><div style="display:grid;grid-template-columns:70px 1fr 56px;gap:6px;align-items:center;margin-bottom:6px"><div class="item-sku">${sku}</div><div class="item-desc">${it.descricao||it.produto||'—'}</div><div class="item-qtd">${it.quantidade||it.qtd||0}</div></div><div class="rastro-box"><div class="rastro-titulo">🔍 Rastreabilidade</div><div class="rastro-grid"><div class="rastro-campo"><label class="rastro-lbl">🏷 Lote</label><input class="rastro-inp" type="text" placeholder="Ex: L2024001" value="${r.lote||''}" oninput="salvarRastro(${i},${j},'lote',this.value)" onblur="salvarRastroImediato(${i},${j},'lote',this.value)"></div><div class="rastro-campo"><label class="rastro-lbl">🏭 Fabricação</label><input class="rastro-inp" type="date" value="${r.fab||''}" oninput="salvarRastro(${i},${j},'fab',this.value)" onblur="salvarRastroImediato(${i},${j},'fab',this.value)"></div><div class="rastro-campo"><label class="rastro-lbl">📅 Validade</label><input class="rastro-inp" type="date" value="${r.val||''}" oninput="salvarRastro(${i},${j},'val',this.value)" onblur="salvarRastroImediato(${i},${j},'val',this.value)"></div></div></div></div>`;
     }).join('') + '</div>';
 
   const fotosHtml = `<div class="fotos-sec"><div class="fotos-lbl">📸 Fotos</div><div class="fotos-row" id="fotos-sep-${i}">${fotosArr.map(f=>`<img class="foto-thumb" src="${f}" onclick="verFoto('${encodeURIComponent(f)}')">`).join('')}${(!tipo && !finalizado)?`<div class="foto-add-sm" onclick="tirarFotoSep(${i})">📷</div>`:''}</div></div>`;
@@ -739,15 +740,19 @@ function pedCardSep(p, i, acao, fotosArr, finalizado) {
 
 window.togglePed = i => document.getElementById('ped-' + i)?.classList.toggle('open');
 
-// Salva rastreabilidade (lote/fab/val) por item — debounce de 800ms para não
-// disparar o onValue a cada tecla e causar re-render enquanto o usuário digita.
+// Salva rastreabilidade (lote/fab/val) por item do pedido — com debounce
 const _rastroTimers = {};
 window.salvarRastro = function(pedIdx, itemIdx, campo, valor) {
-  const key = `${pedIdx}_${itemIdx}_${campo}`;
+  const key = pedIdx + '-' + itemIdx + '-' + campo;
   clearTimeout(_rastroTimers[key]);
   _rastroTimers[key] = setTimeout(() => {
     fbSet(`despachos/${dtSep}/separacao/rastros/${pedIdx}/${itemIdx}/${campo}`, valor || null);
-  }, 800);
+  }, 500);
+};
+window.salvarRastroImediato = function(pedIdx, itemIdx, campo, valor) {
+  const key = pedIdx + '-' + itemIdx + '-' + campo;
+  clearTimeout(_rastroTimers[key]);
+  fbSet(`despachos/${dtSep}/separacao/rastros/${pedIdx}/${itemIdx}/${campo}`, valor || null);
 };
 
 // Abre romaneio de carregamento com rastreabilidade completa

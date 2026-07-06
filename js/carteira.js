@@ -252,21 +252,31 @@ const resumoProdutosExibicao = itens.map(it =>
   `${(it.descricao||'').slice(0,28)}${(it.descricao||'').length>28?'…':''}`
 ).join(' · ');
 
+            const infoAdic = p.informacoes_adicionais || {};
             pedidos.push({
-              _empresa:       emp,
-              codigo_pedido:  p.cabecalho?.codigo_pedido,
-              numero_pedido:  p.cabecalho?.numero_pedido,
-              codigo_cliente: p.cabecalho?.codigo_cliente,
-              cliente_nome:   p.informacoes_adicionais?.contato || '',
-              cliente_cidade: '',
-              cliente_uf:     '',
-              data_inclusao:  info.dInc || '',
-              etapa:          p.cabecalho?.etapa,
+              _empresa:          emp,
+              codigo_pedido:     p.cabecalho?.codigo_pedido,
+              numero_pedido:     p.cabecalho?.numero_pedido,
+              codigo_cliente:    p.cabecalho?.codigo_cliente,
+              cliente_nome:      infoAdic.contato || '',
+              cliente_cidade:    '',
+              cliente_uf:        '',
+              data_inclusao:     info.dInc || '',
+              data_entrega:      p.cabecalho?.data_previsao || infoAdic.prazo_entrega || '',
+              etapa:             p.cabecalho?.etapa,
               frete,
-              departamento:   dep,
-              valor_total:    p.total_pedido?.valor_total_pedido||0,
-              peso_total:     (p.det||[]).reduce((s,d) => s + ((d.inf_adic?.peso_liquido||0) * (d.produto?.quantidade||0)), 0),
-              observacoes:    p.observacoes?.obs_venda||'',
+              departamento:      dep,
+              valor_total:       p.total_pedido?.valor_total_pedido||0,
+              peso_total:        (p.det||[]).reduce((s,d) => s + ((d.inf_adic?.peso_liquido||0) * (d.produto?.quantidade||0)), 0),
+              // campos de obs / opções adicionais
+              obs_venda:         p.observacoes?.obs_venda || '',
+              obs_interna:       p.observacoes?.obs_interna || '',
+              dados_adicionais_nf: infoAdic.dados_adicionais_nf || '',
+              contato:           infoAdic.contato || '',
+              prazo_entrega:     infoAdic.prazo_entrega || p.cabecalho?.data_previsao || '',
+              consumidor_final:  infoAdic.consumidor_final || 'N',
+              // campo legado (usado em jaEnviado)
+              observacoes:       p.observacoes?.obs_venda || '',
               resumoProdutos,
               resumoProdutosExibicao,
               itens,
@@ -564,9 +574,12 @@ function renderModalConfirmacao(usuario) {
         </div>
         <div style="font-size:12px;font-weight:600;color:var(--ink2)">${p.cliente_nome||'—'}</div>
         <div style="font-size:10.5px;color:var(--ink4)">${p.cliente_cidade||''}${p.cliente_uf?' / '+p.cliente_uf:''}</div>
-        <div style="margin-top:6px;font-size:11px;color:var(--ink3);background:var(--cream2);border-radius:6px;padding:6px 8px;border-left:3px solid ${p.observacoes?'var(--gold)':'var(--border)'};">
-          ${p.observacoes ? '💬 '+p.observacoes : '<span style="color:var(--ink4);font-style:italic;">Sem observação</span>'}
-        </div>
+        ${(p.obs_venda||p.obs_interna||p.dados_adicionais_nf) ? `
+        <div style="margin-top:6px;font-size:11px;color:var(--ink3);background:var(--cream2);border-radius:6px;padding:8px 10px;border-left:3px solid var(--gold);display:flex;flex-direction:column;gap:5px;">
+          ${p.obs_venda        ? `<div><b style="font-size:9px;text-transform:uppercase;letter-spacing:.05em;color:var(--gold)">Obs venda:</b> ${p.obs_venda}</div>` : ''}
+          ${p.obs_interna      ? `<div><b style="font-size:9px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink4)">Obs interna:</b> ${p.obs_interna}</div>` : ''}
+          ${p.dados_adicionais_nf ? `<div><b style="font-size:9px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink4)">Dados NF:</b> ${p.dados_adicionais_nf}</div>` : ''}
+        </div>` : `<div style="margin-top:6px;font-size:10px;color:var(--ink4);font-style:italic;">Sem observação</div>`}
       </div>
       <button onclick="removerPendenteEnvio(${idx})" title="Remover do envio"
         style="background:rgba(190,18,60,.08);border:1px solid rgba(190,18,60,.2);border-radius:8px;width:32px;height:32px;cursor:pointer;font-size:14px;flex-shrink:0;color:#be123c;">
@@ -608,7 +621,11 @@ window.confirmarEnvioRoteirizador = function() {
   cliente_cep:p.cliente_cep||'', cliente_end:p.cliente_end||'',
   valor_total:p.valor_total, peso_total:p.peso_total,
   frete:p.frete, departamento:p.departamento.label, itens:p.itens,
-  observacoes:p.observacoes,
+  observacoes:p.obs_venda||'',
+  obs_interna:p.obs_interna||'',
+  dados_adicionais_nf:p.dados_adicionais_nf||'',
+  data_entrega:p.data_entrega||'',
+  consumidor_final:p.consumidor_final||'N',
 }));
   const paraMarcar = _pendentesEnvio.slice();
   _pendentesEnvio = [];
@@ -689,9 +706,24 @@ function renderDrawer() {
     <div class="kv"><b>Departamento</b><span>${p.departamento.label}</span></div>
     <div class="kv"><b>Etapa</b><span>${etapaInfo(p.etapa).label}</span></div>
     <div class="kv"><b>Valor Total</b><span style="font-size:15px;font-family:'Playfair Display',serif">${fmtValor(p.valor_total)}</span></div>
-    <h4>Observações</h4>
-    <textarea id="dr-obs" style="width:100%;min-height:70px;padding:10px;border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:13px;background:var(--cream);resize:vertical">${p.observacoes||''}</textarea>
-    <button onclick="salvarObs()" style="margin-top:6px;padding:8px 16px;background:var(--navy);color:var(--gold3);border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer">💾 Salvar observação</button>
+    ${p.data_entrega ? `<div class="kv"><b>Previsão entrega</b><span>${p.data_entrega}</span></div>` : ''}
+    ${p.consumidor_final==='S' ? `<div class="kv"><b>Consumidor final</b><span style="color:#166534;font-weight:700">Sim</span></div>` : ''}
+    <h4 style="margin-top:18px;margin-bottom:10px;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3)">Observações &amp; Opções Adicionais</h4>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px">
+      <div>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--gold);margin-bottom:4px">💬 Observação de venda</div>
+        <textarea id="dr-obs" style="width:100%;min-height:64px;padding:10px;border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:13px;background:var(--cream);resize:vertical">${p.obs_venda||''}</textarea>
+      </div>
+      <div>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink3);margin-bottom:4px">🔒 Observação interna</div>
+        <textarea id="dr-obs-int" style="width:100%;min-height:54px;padding:10px;border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:13px;background:var(--cream);resize:vertical">${p.obs_interna||''}</textarea>
+      </div>
+      <div>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink3);margin-bottom:4px">📄 Dados adicionais para NF</div>
+        <textarea id="dr-obs-nf" style="width:100%;min-height:54px;padding:10px;border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:13px;background:var(--cream);resize:vertical">${p.dados_adicionais_nf||''}</textarea>
+      </div>
+    </div>
+    <button onclick="salvarObs()" style="margin-bottom:6px;padding:9px 18px;background:var(--navy);color:var(--gold3);border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;width:100%">💾 Salvar observações</button>
     <h4>Itens (${p.itens.length})</h4>
     <table class="itens">
       <thead><tr><th>SKU</th><th>Descrição</th><th class="r">Qtd</th><th class="r">Estoque</th><th class="r">Vlr Unit.</th><th></th></tr></thead>
@@ -721,12 +753,19 @@ function renderDrawer() {
 
 window.salvarObs = async function() {
   const p = pedidoAtual; if (!p) return;
-  const obs = document.getElementById('dr-obs')?.value||'';
+  const obsVenda  = document.getElementById('dr-obs')?.value     || '';
+  const obsIntern = document.getElementById('dr-obs-int')?.value || '';
+  const dadosNF   = document.getElementById('dr-obs-nf')?.value  || '';
   try {
     await omieCall(p._empresa, 'https://app.omie.com.br/api/v1/produtos/pedido/', 'AlterarPedidoVenda',
-      [{ cabecalho:{codigo_pedido:p.codigo_pedido}, observacoes:{obs_venda:obs} }]);
-    p.observacoes = obs;
-    alert('✅ Observação salva!');
+      [{ cabecalho:{ codigo_pedido: p.codigo_pedido },
+         observacoes:{ obs_venda: obsVenda, obs_interna: obsIntern },
+         informacoes_adicionais:{ dados_adicionais_nf: dadosNF } }]);
+    p.obs_venda          = obsVenda;
+    p.obs_interna        = obsIntern;
+    p.dados_adicionais_nf = dadosNF;
+    p.observacoes        = obsVenda; // mantém campo legado
+    alert('✅ Observações salvas!');
   } catch(e) { alert('❌ Erro: '+e.message); }
 };
 

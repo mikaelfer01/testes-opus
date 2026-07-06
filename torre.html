@@ -144,6 +144,12 @@ body{display:flex;flex-direction:column;-webkit-font-smoothing:antialiased}
 .empty-icon{font-size:36px;margin-bottom:8px}
 .ld{display:inline-block;width:14px;height:14px;border:2px solid rgba(30,64,175,.2);border-top-color:var(--azul);border-radius:50%;animation:spin .7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
+@media(max-width:700px){
+  .painel{width:100%;border-right:none;border-bottom:1px solid rgba(255,255,255,.65);max-height:260px}
+  .main{flex-direction:column}
+  .hbadge{display:none}
+  .tab-btn{font-size:10px;padding:0 8px}
+}
 </style>
 <script type="module" src="/js/nav.js"></script>
 </head>
