@@ -641,7 +641,7 @@ nav::before{
 .frete-tabela{background:rgba(22,163,74,0.14);color:#15803d;border:1px solid rgba(22,163,74,0.25)}
 .frete-prox{background:rgba(245,158,11,0.16);color:#a16207;border:1px solid rgba(245,158,11,0.3)}
 .frete-nd{background:rgba(15,23,42,0.06);color:#475569;border:1px solid rgba(15,23,42,0.1)}
- .tabs-bar{position:sticky;top:0;z-index:150;display:flex;align-items:center;background:#0d1f3c;padding:0 20px;height:54px;border-bottom:2px solid #b8902a;box-shadow:0 2px 16px rgba(13,31,60,.35);}
+ .rot-tabs-bar{position:sticky;top:0;z-index:150;display:flex;align-items:center;background:#0d1f3c;padding:0 20px;height:54px;border-bottom:2px solid #b8902a;box-shadow:0 2px 16px rgba(13,31,60,.35);}
 .tabs-brand{font-family:'Playfair Display',serif;font-style:italic;font-size:15px;font-weight:700;color:#e8c96a;margin-right:28px;white-space:nowrap;}
 .tabs-brand small{font-family:'Inter',sans-serif;font-style:normal;font-size:9px;font-weight:800;letter-spacing:.22em;text-transform:uppercase;color:#ffffff;margin-left:7px;vertical-align:middle;}
 .tab-link{height:54px;padding:0 16px;display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:800;color:rgba(255,255,255,.85);text-decoration:none;border-bottom:3px solid transparent;border-top:none;border-left:none;border-right:none;background:transparent;font-family:inherit;cursor:pointer;letter-spacing:.05em;text-transform:uppercase;transition:all .18s;white-space:nowrap;}
@@ -664,7 +664,7 @@ nav::before{
 <body>
 <div id="opus-body-shift">
 <!-- BARRA 2 — FUNÇÕES DO ROTEIRIZADOR -->
-<nav class="tabs-bar" style="height:48px;border-top:1px solid rgba(184,144,42,0.12);border-bottom:2px solid #b8902a;">
+<nav class="rot-tabs-bar" style="height:48px;border-top:1px solid rgba(184,144,42,0.12);border-bottom:2px solid #b8902a;">
   <div style="display:flex;align-items:center;gap:8px;margin-left:auto;">
     <div class="bi" id="bt">-- clientes</div>
     <div class="bi" id="bmap">Carregando mapa...</div>
@@ -5731,7 +5731,7 @@ btnDesp.textContent = r._token ? '✅ Enviado' : '📦 Enviar para Separação';
 
 // ── ADICIONAR BOTÃO "DESPACHAR TUDO" E "TORRE" NA BARRA ──────────────────────
 (function adicionarBotoesBarra(){
-  var barra = document.querySelector('.tabs-bar:nth-child(2) div[style*="margin-left:auto"]');
+  var barra = document.querySelector('.rot-tabs-bar:nth-child(2) div[style*="margin-left:auto"]');
   if (!barra) { setTimeout(adicionarBotoesBarra, 500); return; }
 
   // Botão Torre de Controle
